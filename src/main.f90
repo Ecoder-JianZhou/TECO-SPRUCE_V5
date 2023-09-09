@@ -1,5 +1,5 @@
 program TECO
-    use mod_data
+    use datatypes
     implicit none
     ! test mode
     print*,"main"

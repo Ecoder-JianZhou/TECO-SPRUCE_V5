@@ -5,7 +5,7 @@ gfortran -g -fbacktrace -Wall -fcheck=all   \
     `# src/teco/updateAndSummary.f90`           \
     `# src/teco/writeOutputs2nc.f90`            \
     `# src/teco/soil.f90 `                      \
-    `# src/teco/vegetation.f90`                 \
+    src/teco/vegetation.f90                 \
     `# src/teco/transfer.f90 `                  \
     `# src/tools/mcmc_functions.f90`            \
     `# src/tools/mcmc_outputs.f90`              \
