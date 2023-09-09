@@ -521,6 +521,7 @@ module vegetation
       real gsw, gswv, rswv
       real gsc
       ! thermodynamic parameters for air
+
       TairK = Tair + 273.2
       rhocp = cpair*Patm*AirMa/(Rconst*TairK)
       H2OLv = H2oLv0 - 2.365e3*Tair
