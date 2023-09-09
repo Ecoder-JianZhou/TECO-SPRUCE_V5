@@ -19,6 +19,8 @@ module vegetation
       ! local variables
       integer :: doy, hour, ipft
       real    :: lat, radsol, fbeam, coszen, Radabv(2)
+      real    :: Aleaf(2), Eleaf(2), Hleaf(2), gbleaf(2), gsleaf(2) ! from xlayers
+      real    :: Rsoilab1, Rsoilab2, Esoil !from xlayers
 
       doy    = iforcing%doy
       hour   = iforcing%hour + 1
@@ -28,7 +30,8 @@ module vegetation
       coszen = sinbet(doy, hour, lat)
 
       do ipft = 1, vegn%npft
-         call xlayers(vegn%allSp(ipft), iforcing, fbeam, coszen, Radabv)
+         call xlayers(vegn%allSp(ipft), iforcing, fbeam, coszen, Radabv, Aleaf, Eleaf, Hleaf, gbleaf, gsleaf, &
+         Rsoilab1, Rsoilab2, Esoil)
       enddo 
 
    end subroutine vegn_canopy
@@ -68,7 +71,8 @@ module vegetation
       return
    end subroutine yrday
 
-   subroutine xlayers(spec, iforcing, fbeam, coszen, radabv) 
+   subroutine xlayers(spec, iforcing, fbeam, coszen, radabv, Aleaf, Eleaf, Hleaf, gbleaf, gsleaf, &
+      Rsoilab1, Rsoilab2, Esoil) 
       ! the multi-layered canopy model developed by
       ! Ray Leuning with the new radiative transfer scheme
       ! implemented by Y.P. Wang (from Sellers 1986)
@@ -79,7 +83,8 @@ module vegetation
       type(spec_data_type), intent(inout) :: spec
       type(forcing_data_type), intent(in) :: iforcing
       real, intent(in) :: fbeam, coszen, Radabv(2)
-      real :: Acan1, Acan2, Ecan1, Ecan2    ! outputs
+      real, intent(inout) :: Aleaf(2), Eleaf(2), Hleaf(2), gbleaf(2), gsleaf(2)
+      real :: Acan1, Acan2, Ecan1, Ecan2, Rsoilab1, Rsoilab2, Esoil    ! outputs
       
       ! local vars
       real    :: Rnst1 , Rnst2 , Qcan1 , Qcan2  !net rad, sunlit, vis rad
@@ -97,12 +102,16 @@ module vegetation
       real    :: layer1(5), layer2(5)
       real    :: FLAIT1, flait
       real    :: Gaussx(5), Gaussw(5), Gaussw_cum(5) 
-      real    :: wind, raero, WILTPT, FILDCP
-      real    :: TairK
+      real    :: wind, raero, WILTPT, FILDCP, Dair, RH, esat1, eairP
+      real    :: TairK, Tlk1, Tlk2, Rsoilab3, Rsoilabs 
+      real    :: rhocp, H2OLv, slope, psyc, Cmolar, fw1, Rsoil, rLAI 
+      real    :: Hsoil
       integer :: nw, ng
       ! transfer to other subroutine
       real    :: extkd, extkb, flai, kpr(3,2), reff(3,2)
       real    :: windUx, Vcmxx, eJmxx
+      real    :: QLair, QLleaf ! to Tsoil_simu
+      real    :: QLsoil ! same in soil module
       ! calculate in other subrontines
       real    :: emair, Qabs(3,2), Rnstar(2), grdn
       real    :: Tleaf(2)
@@ -111,8 +120,13 @@ module vegetation
       data Gaussw/0.1184635, 0.2393144, 0.2844444, 0.2393144, 0.1184635/
       data Gaussw_cum/0.11846, 0.35777, 0.64222, 0.88153, 1.0/
 
-      flait  = spec%LAI                ! Jian: LAI relavant variable from vegetable to energy
+      flait  = spec%LAI                 ! Jian: LAI relavant variable from vegetable to energy
       wind   = iforcing%WS
+      Dair   = iforcing%VPD    ! air water vapour defficit? Unit Pa
+      RH     = AMAX1(0.01,AMIN1(99.99,iforcing%RH))                ! relative humidity
+      esat1  = 610.78*exp(17.27*iforcing%Tair/(iforcing%Tair + 237.3))      ! intermediate parameter
+      eairP  = esat1*RH/100.                              ! Added for SPRUCE, due to lack of VPD data. Jian: ? SPRUCE has the data? !air water vapour pressure
+      Dair   = esat1-eairP                                ! Jian: confused that SPRUCE has the VPD data, why calculate it again?
       if (wind .lt. 0.01) wind = 0.01   ! set windspeed to the minimum speed to avoid zero Gb
       ! soil water conditions
       WILTPT = st%wsmin/100.
@@ -184,7 +198,7 @@ module vegetation
       do ng = 1, 5
          flai = gaussx(ng)*flait
          ! radiation absorption for visible and near infra-red
-         call goudriaan(fbeam, coszen, Radabv, kpr, reff, flai, scatt, Qabs)
+         call goudriaan(spec, fbeam, coszen, Radabv, kpr, reff, flai, scatt, Qabs)
          ! isothermal net radiation & radiation conductance at canopy top
          call Radiso(iforcing, fbeam, extkd, flait, flai, Qabs, emair, Rnstar, grdn)
          windUx = wind*exp(- st%extkU*flai)     ! windspeed at depth xi
@@ -214,8 +228,8 @@ module vegetation
          if (Aleaf(1) .lt. 0.0) Aleaf(1) = 0.0      !Weng 2/16/2006
          if (Aleaf(2) .lt. 0.0) Aleaf(2) = 0.0      !Weng 2/16/2006
 
-         Acan1      = Acan1 + fslt*Aleaf(1)*Gaussw(ng)*flait*stom_n    !amphi/hypostomatous
-         Acan2      = Acan2 + fshd*Aleaf(2)*Gaussw(ng)*flait*stom_n
+         Acan1      = Acan1 + fslt*Aleaf(1)*Gaussw(ng)*flait*spec%stom_n    !amphi/hypostomatous
+         Acan2      = Acan2 + fshd*Aleaf(2)*Gaussw(ng)*flait*spec%stom_n
          AcanL(ng)  = Acan1 + Acan2
 
          layer1(ng) = Aleaf(1)
@@ -229,11 +243,11 @@ module vegetation
          Hcan2     = Hcan2 + fshd*Hleaf(2)*Gaussw(ng)*flait
          HcanL(ng) = Hcan1 + Hcan2
 
-         Gbwc1     = Gbwc1 + fslt*gbleaf(1)*Gaussw(ng)*flait*stom_n
-         Gbwc2     = Gbwc2 + fshd*gbleaf(2)*Gaussw(ng)*flait*stom_n
+         Gbwc1     = Gbwc1 + fslt*gbleaf(1)*Gaussw(ng)*flait*spec%stom_n
+         Gbwc2     = Gbwc2 + fshd*gbleaf(2)*Gaussw(ng)*flait*spec%stom_n
 
-         Gswc1     = Gswc1 + fslt*gsleaf(1)*Gaussw(ng)*flait*stom_n
-         Gswc2     = Gswc2 + fshd*gsleaf(2)*Gaussw(ng)*flait*stom_n
+         Gswc1     = Gswc1 + fslt*gsleaf(1)*Gaussw(ng)*flait*spec%stom_n
+         Gswc2     = Gswc2 + fshd*gsleaf(2)*Gaussw(ng)*flait*spec%stom_n
 
          Tleaf1    = Tleaf1 + fslt*Tleaf(1)*Gaussw(ng)*flait
          Tleaf2    = Tleaf2 + fshd*Tleaf(2)*Gaussw(ng)*flait
@@ -276,26 +290,120 @@ module vegetation
       Rsoilabs = Rsoilab1 + Rsoilab2 + Rsoilab3
 
       ! thermodynamic parameters for air
-      TairK  = Tair + 273.2
+      TairK  = iforcing%Tair + 273.2
       rhocp  = cpair*Patm*AirMa/(Rconst*TairK)
-      H2OLv  = H2oLv0 - 2.365e3*Tair
-      slope  = (esat(Tair + 0.1) - esat(Tair))/0.1
+      H2OLv  = H2oLv0 - 2.365e3*iforcing%Tair
+      slope  = (esat(iforcing%Tair + 0.1) - esat(iforcing%Tair))/0.1
       psyc   = Patm*cpair*AirMa/(H2OLv*H2OMw)
       Cmolar = Patm/(Rconst*TairK)
-      fw1    = AMIN1(AMAX1((FILDCP - wcl(1))/(FILDCP - WILTPT), 0.05), 1.0)
+      fw1    = AMIN1(AMAX1((FILDCP - st%wcl(1))/(FILDCP - WILTPT), 0.05), 1.0)
       Rsoil  = 30.*exp(0.2/fw1)
       rLAI   = exp(flait)
       ! latent heat flux into air from soil
       ! Eleaf(ileaf)=1.0*
       ! &     (slope*Y*Rnstar(ileaf)+rhocp*Dair/(rbH_L+raero))/    !2* Weng 0215
       ! &     (slope*Y+psyc*(rswv+rbw+raero)/(rbH_L+raero))
-      Esoil  = (slope*(Rsoilabs - G) + rhocp*Dair/(raero + rLAI))/       &
+      Esoil  = (slope*(Rsoilabs - st%G) + rhocp*Dair/(raero + rLAI))/       &
                &      (slope + psyc*(rsoil/(raero + rLAI) + 1.))!*omega!*AMIN1(0.5, AMAX1(0.333, 0.333 + omega))
       ! sensible heat flux into air from soil
-      Hsoil = Rsoilabs - Esoil - G
-      
+      Hsoil = Rsoilabs - Esoil - st%G  ! Jian: it is also calculated in soil module?
       return
    end subroutine xlayers
+
+   subroutine Radiso(iforcing, fbeam, extkd, flait, flai, Qabs, emair, Rnstar, grdn)   
+      ! Rnstar(type): type=1 for sunlit; =2 for shaded leaves (W/m2)
+      ! 23 Dec 1994
+      ! calculates isothermal net radiation for sunlit and shaded leaves under clear skies
+      ! -----------------------------------------------------------------------------------
+      type(forcing_data_type), intent(in) :: iforcing
+      real, intent(in) :: fbeam, extkd, flait, flai, Qabs(3,2)
+      ! local vars
+      real emsky, ep8z, tau8, emcloud, Bn0, Bnxi
+      real TairK, rhocp, RH, esat1, eairP
+      ! update here and use it here and other subroutine
+      real emair, Rnstar(2), grdn
+
+      TairK = iforcing%Tair + 273.2
+      RH    = AMAX1(0.01,AMIN1(99.99,iforcing%RH))                ! relative humidity
+      esat1 = 610.78*exp(17.27*iforcing%Tair/(iforcing%Tair + 237.3))      ! intermediate parameter
+      eairP = esat1*RH/100.                              ! Added for SPRUCE, due to lack of VPD data. Jian: ? SPRUCE has the data? !air water vapour pressure
+
+      ! thermodynamic properties of air
+      rhocp   = cpair*Patm*airMa/(Rconst*TairK)   ! volumetric heat capacity (J/m3/K)
+      ! apparent atmospheric emissivity for clear skies (Brutsaert, 1975)
+      emsky   = 0.642*(eairP/Tairk)**(1./7)       ! note eair in Pa
+      ! apparent emissivity from clouds (Kimball et al 1982)
+      ep8z    = 0.24 + 2.98e-12*eairP*eairP*exp(3000/TairK)
+      tau8    = amin1(1.0, 1.0 - ep8z*(1.4 - 0.4*ep8z))            !ensure tau8<1
+      emcloud = 0.36*tau8*(1.-fbeam)*(1 - 10./TairK)**4      !10 from Tcloud = Tair-10
+      ! apparent emissivity from sky plus clouds
+      !      emair=emsky+emcloud
+      ! 20/06/96
+      emair   = emsky
+      if (emair .gt. 1.0) emair = 1.0
+      ! net isothermal outgoing longwave radiation per unit leaf area at canopy
+      ! top & thin layer at flai (Note Rn* = Sn + Bn is used rather than Rn* = Sn - Bn in Leuning et al 1985)
+      Bn0  = sigma*(TairK**4.)
+      Bnxi = Bn0*extkd*(exp(-extkd*flai)*(emair - emleaf)       &
+          &    + exp(-extkd*(flait - flai))*(emsoil - emleaf))
+      ! isothermal net radiation per unit leaf area for thin layer of sunlit and
+      ! shaded leaves
+      Rnstar(1) = Qabs(1, 1) + Qabs(2, 1) + Bnxi
+      Rnstar(2) = Qabs(1, 2) + Qabs(2, 2) + Bnxi
+      ! radiation conductance (m/s) @ flai
+      grdn = 4.*sigma*(TairK**3.)*extkd*emleaf*               &       ! corrected by Jiang Jiang 2015/9/29
+          &    (exp(-extkd*flai) + exp(-extkd*(flait - flai)))       &
+          &    /rhocp
+      return
+   end subroutine Radiso
+
+   subroutine goudriaan(spec, fbeam, coszen, Radabv, kpr, reff, flai, scatt, Qabs)
+      ! for spheric leaf angle distribution only
+      ! compute within canopy radiation (PAR and near infra-red bands)
+      ! using two-stream approximation (Goudriaan & vanLaar 1994)
+      ! tauL: leaf transmittance
+      ! rhoL: leaf reflectance
+      ! rhoS: soil reflectance
+      ! sfang XiL function of Ross (1975) - allows for departure from spherical LAD
+      !     (-1 vertical, +1 horizontal leaves, 0 spherical)
+      ! FLAI: canopy leaf area index
+      ! funG: Ross' G function
+      ! scatB: upscatter parameter for direct beam
+      ! scatD: upscatter parameter for diffuse
+      ! albedo: single scattering albedo
+      ! output:
+      ! Qabs(nwave,type), nwave=1 for visible; =2 for NIR,
+      !                   type =1 for sunlit;  =2 for shaded (W/m2)
+      !------------------------------------------------------------------------------
+      type(spec_data_type), intent(in) :: spec
+      real, intent(in) :: fbeam, coszen, Radabv(2)    !cos zenith angle
+      real, intent(in) :: kpr(3,2), reff(3,2), scatt(2), flai
+      real :: Qabs(3,2)
+
+      real :: extkb ! the same calculation process in xlayer
+      real xphi1, xphi2, funG, Qd0, Qb0
+      integer nw
+
+      ! Ross-Goudriaan function for G(u) (see Sellers 1985, Eq 13)
+      xphi1 = 0.5 - 0.633*spec%xfang - 0.33*spec%xfang*spec%xfang
+      xphi2 = 0.877*(1.0 - 2.0*xphi1)
+      funG = xphi1 + xphi2*coszen                        !G-function: Projection of unit leaf area in direction of beam
+      if (coszen .gt. 0) then                            !check if day or night
+         extKb = funG/coszen                             !beam extinction coeff - black leaves
+      else
+         extKb = 100.
+      end if
+      ! Goudriaan theory as used in Leuning et al 1995 (Eq Nos from Goudriaan & van Laar, 1994)
+      do nw = 1, 2
+         Qd0 = (1.-fbeam)*radabv(nw)                    !diffuse incident radiation
+         Qb0 = fbeam*radabv(nw)                         !beam incident radiation
+         Qabs(nw, 2) = Qd0*(kpr(nw, 2)*(1.-reff(nw, 2))*exp(-kpr(nw, 2)*FLAI)) +  & !absorbed radiation - shaded leaves, diffuse
+                &      Qb0*(kpr(nw, 1)*(1.-reff(nw, 1))*exp(-kpr(nw, 1)*FLAI)  -  & !beam scattered
+                &      extKb*(1.-scatt(nw))*exp(-extKb*FLAI))
+         Qabs(nw, 1) = Qabs(nw, 2) + extKb*Qb0*(1.-scatt(nw))                     !absorbed radiation - sunlit leaves
+      end do
+      return
+   end subroutine goudriaan
 
    ! functions 
    real function sinbet(doy, hour, lat)
@@ -317,5 +425,12 @@ module vegetation
       sinbet = A + B*cos(pi*(hour - 12.)/12.)
       return
    end function sinbet
+
+   real function esat(T)
+      real T
+      ! returns saturation vapour pressure in Pa
+      esat = 610.78*exp(17.27*T/(T + 237.3))
+      return
+   end
 
 end module vegetation

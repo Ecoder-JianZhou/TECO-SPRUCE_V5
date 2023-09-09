@@ -107,6 +107,9 @@ module datatypes
         real :: wsmax
         real :: wsmin
         real :: extkU
+        real :: G
+        ! state variables
+        real :: wcl(10)
     end type site_data_type
     type(site_data_type) :: st
 
@@ -118,6 +121,7 @@ module datatypes
         real :: Vcmax0    ! fixed value from namelist
         real :: eJmx0
         real :: gddonset
+        real :: stom_n
         ! flux 
         real :: gpp
         real :: transp
