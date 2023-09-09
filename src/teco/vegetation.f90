@@ -207,7 +207,7 @@ module vegetation
          eJmxx  = spec%eJmx0*scalex
          if (radabv(1) .ge. 10.0) then                          !check solar Radiation > 10 W/m2
             ! leaf stomata-photosynthesis-transpiration model - daytime
-            call agsean_day()
+            call agsean_day(iforcing, windUx, Tleaf)
          else
             call agsean_ngt()
          end if
@@ -404,6 +404,202 @@ module vegetation
       end do
       return
    end subroutine goudriaan
+
+   subroutine agsean_day(iforcing, windUx, Tleaf)
+      implicit none
+      type(forcing_data_type), intent(in) :: iforcing
+      real, intent(in) :: windUx
+      real :: Tleaf(2)  ! output?
+      ! local variables
+      integer :: kr1, ileaf
+      real    :: Gras, gbHf, gbH, rbH, rbw, rbH_L, rrdn, Y
+      real    :: gsw, gswv, rswv
+      real    :: TairK, esat1, eairP, RH, Dair 
+      real    :: rhocp, H2OLv, Cmolar
+      real    :: gbHu, Tlk, Dleaf
+
+      ! thermodynamic parameters for air
+      TairK  = iforcing%Tair + 273.2
+      esat1  = 610.78*exp(17.27*Tair/(Tair + 237.3))      ! intermediate parameter
+      RH     = AMAX1(0.01,AMIN1(99.99,iforcing%RH))                ! relative humidity
+      eairP  = esat1*RH/100.                              ! Added for SPRUCE, due to lack of VPD data. Jian: ? SPRUCE has the data? !air water vapour pressure
+      Dair   = esat1-eairP
+      rhocp  = cpair*Patm*AirMa/(Rconst*TairK)
+      H2OLv  = H2oLv0 - 2.365e3*iforcing%Tair
+      slope  = (esat(iforcing%Tair + 0.1) - esat(iforcing%Tair))/0.1
+      psyc   = Patm*cpair*AirMa/(H2OLv*H2OMw)
+      Cmolar = Patm/(Rconst*TairK)
+      weighJ = 1.0
+      ! boundary layer conductance for heat - single sided, forced convection
+      ! (Monteith 1973, P106 & notes dated 23/12/94)
+      if (windUx/wleaf >= 0.0) then
+         gbHu = 0.003*sqrt(windUx/wleaf)    !m/s
+      else
+         gbHu = 0.003 !*sqrt(-windUx/wleaf)
+      end if         ! Weng 10/31/2008
+      ! raero=0.0                  ! aerodynamic resistance s/m
+      do ileaf = 1, 2              ! loop over sunlit and shaded leaves
+         ! first estimate of leaf temperature - assume air temp
+         Tleaf(ileaf) = iforcing%Tair
+         Tlk = Tleaf(ileaf) + 273.2    !Tleaf to deg K
+         ! first estimate of deficit at leaf surface - assume Da
+         Dleaf = Dair                !Pa
+         ! first estimate for co2cs
+         co2cs = co2ca               !mol/mol
+         Qapar = (4.6e-6)*Qabs(1, ileaf)
+         ! ********************************************************************
+         kr1 = 0                     !iteration counter for LE
+         ! return point for evaporation iteration
+         do ! iteration for leaf temperature
+            ! single-sided boundary layer conductance - free convection (see notes 23/12/94)
+            Gras   = 1.595e8*ABS(Tleaf(ileaf) - iforcing%Tair)*(wleaf**3.)     !Grashof
+            gbHf   = 0.5*Dheat*(Gras**0.25)/wleaf
+            gbH    = gbHu + gbHf                         !m/s
+            rbH    = 1./gbH                            !b/l resistance to heat transfer
+            rbw    = 0.93*rbH                          !b/l resistance to water vapour
+            ! Y factor for leaf: stom_n = 1.0 for hypostomatous leaf;  stom_n = 2.0 for amphistomatous leaf
+            rbH_L  = rbH*stom_n/2.                   !final b/l resistance for heat
+            rrdn   = 1./grdn
+            Y      = 1./(1.+(rbH_L + raero)/rrdn)
+            ! boundary layer conductance for CO2 - single side only (mol/m2/s)
+            gbc    = Cmolar*gbH/1.32            !mol/m2/s
+            gsc0   = gsw0/1.57                 !convert conductance for H2O to that for CO2
+            varQc  = 0.0
+            weighR = 1.0
+            ! -------------------------------------------
+            ! write(*,*)"test ileaf: ", ileaf
+            ! write(*,*)"before photosyn: ", Gbc, fwsoil, Vcmxx
+            ! write(*,*)"before photosyn2: ", Cmolar, gbH, gbHu, gbHf, Dheat,Gras, wleaf
+            call photosyn()  !outputs
+            ! choose smaller of Ac, Aq
+               
+            Aleaf(ileaf) = Aleafx      !0.7 Weng 3/22/2006          !mol CO2/m2/s
+            ! calculate new values for gsc, cs (Lohammer model)
+            co2cs = co2ca - Aleaf(ileaf)/gbc
+            co2Ci(ileaf) = co2cs - Aleaf(ileaf)/gscx
+            ! scale variables
+            gsw  = gscx*1.56       !gsw in mol/m2/s, oreginal:gsw=gscx*1.56,Weng20090226
+            gswv = gsw/Cmolar                           !gsw in m/s
+            rswv = 1./gswv
+            ! calculate evap'n using combination equation with current estimate of gsw
+            Eleaf(ileaf) = 1.0*(slope*Y*Rnstar(ileaf) + rhocp*Dair/(rbH_L + raero))/    &   !2* Weng 0215
+                           & (slope*Y + psyc*(rswv + rbw + raero)/(rbH_L + raero))!*omega!*AMIN1(0.5, AMAX1(0.333, 0.333 + omega))!*(0.08+(1.-0.08)* Amin1(1.0, 0.3*omega))
+            ! calculate sensible heat flux
+            Hleaf(ileaf) = Y*(Rnstar(ileaf) - Eleaf(ileaf))
+            ! calculate new leaf temperature (K)
+            Tlk1 = 273.2 + iforcing%Tair + Hleaf(ileaf)*(rbH/2.+raero)/rhocp
+            ! calculate Dleaf use LE=(rhocp/psyc)*gsw*Ds
+            Dleaf = psyc*Eleaf(ileaf)/(rhocp*gswv)
+            gbleaf(ileaf) = gbc*1.32*1.075
+            gsleaf(ileaf) = gsw
+            ! compare current and previous leaf temperatures
+            if (abs(Tlk1 - Tlk) .le. 0.1) exit ! original is 0.05 C Weng 10/31/2008
+            ! update leaf temperature  ! leaf temperature calculation has many problems! Weng 10/31/2008
+            Tlk = Tlk1
+            Tleaf(ileaf) = Tlk1 - 273.2
+            kr1 = kr1 + 1
+            if (kr1 > 500) then
+               Tlk = TairK
+               exit
+            end if
+            if (Tlk < 200.) then
+               Tlk = TairK
+               exit
+            end if                     ! Weng 10/31/2008
+            ! goto 100                          !solution not found yet
+         end do
+         ! 10  continue
+      end do
+      return
+   end subroutine agsean_day
+
+   ! -------------------------------------------------------------------------
+   subroutine agsean_ngt()
+      ! implicit real (a-z)
+      integer kr1, ileaf
+      real Gras, gbHf, gbH, rbH, rbw, rbH_L, rrdn, Y
+      real gsw, gswv, rswv
+      real gsc
+      ! thermodynamic parameters for air
+      TairK = Tair + 273.2
+      rhocp = cpair*Patm*AirMa/(Rconst*TairK)
+      H2OLv = H2oLv0 - 2.365e3*Tair
+      slope = (esat(Tair + 0.1) - esat(Tair))/0.1
+      psyc = Patm*cpair*AirMa/(H2OLv*H2OMw)
+      Cmolar = Patm/(Rconst*TairK)
+      weighJ = 1.0
+      ! boundary layer conductance for heat - single sided, forced convection
+      ! (Monteith 1973, P106 & notes dated 23/12/94)
+      gbHu = 0.003*sqrt(windUx/wleaf)    !m/s
+      ! raero=0.0                        !aerodynamic resistance s/m
+      do ileaf = 1, 2                  ! loop over sunlit and shaded leaves
+         ! first estimate of leaf temperature - assume air temp
+         Tleaf(ileaf) = Tair
+         Tlk = Tleaf(ileaf) + 273.2    !Tleaf to deg K
+         ! first estimate of deficit at leaf surface - assume Da
+         Dleaf = Dair                !Pa
+         ! first estimate for co2cs
+         co2cs = co2ca               !mol/mol
+         Qapar = (4.6e-6)*Qabs(1, ileaf)
+         ! ********************************************************************
+         kr1 = 0                     !iteration counter for LE
+         do
+            !100        continue !    return point for evaporation iteration
+            ! single-sided boundary layer conductance - free convection (see notes 23/12/94)
+            Gras = 1.595e8*abs(Tleaf(ileaf) - Tair)*(wleaf**3)     !Grashof
+            gbHf = 0.5*Dheat*(Gras**0.25)/wleaf
+            gbH = gbHu + gbHf                         !m/s
+            rbH = 1./gbH                            !b/l resistance to heat transfer
+            rbw = 0.93*rbH                          !b/l resistance to water vapour
+            ! Y factor for leaf: stom_n = 1.0 for hypostomatous leaf;  stom_n = 2.0 for amphistomatous leaf
+            rbH_L = rbH*stom_n/2.                   !final b/l resistance for heat
+            rrdn = 1./grdn
+            Y = 1./(1.+(rbH_L + raero)/rrdn)
+            ! boundary layer conductance for CO2 - single side only (mol/m2/s)
+            gbc = Cmolar*gbH/1.32            !mol/m2/s
+            gsc0 = gsw0/1.57                        !convert conductance for H2O to that for CO2
+            varQc = 0.0
+            weighR = 1.0
+            ! respiration
+            Aleafx = -0.0089*Vcmxx*exp(0.069*(Tlk - 293.2))
+            gsc = gsc0
+            ! choose smaller of Ac, Aq
+            if (ISNAN(Aleafx)) then
+               
+               stop
+            endif
+            Aleaf(ileaf) = Aleafx                     !mol CO2/m2/s
+            ! calculate new values for gsc, cs (Lohammer model)
+            co2cs = co2ca - Aleaf(ileaf)/gbc
+            co2Ci(ileaf) = co2cs - Aleaf(ileaf)/gsc
+            ! scale variables
+            gsw = gsc*1.56                              !gsw in mol/m2/s
+            gswv = gsw/Cmolar                           !gsw in m/s
+            rswv = 1./gswv
+            ! calculate evap'n using combination equation with current estimate of gsw
+            Eleaf(ileaf) = (slope*Y*Rnstar(ileaf) + rhocp*Dair/(rbH_L + raero))/   &
+                &      (slope*Y + psyc*(rswv + rbw + raero)/(rbH_L + raero))!*omega!*AMIN1(0.5, AMAX1(0.333, 0.333 + omega))
+            ! calculate sensible heat flux
+            Hleaf(ileaf) = Y*(Rnstar(ileaf) - Eleaf(ileaf))
+            ! calculate new leaf temperature (K)
+            Tlk1 = 273.2 + Tair + Hleaf(ileaf)*(rbH/2.+raero)/rhocp
+            ! calculate Dleaf use LE=(rhocp/psyc)*gsw*Ds
+            Dleaf = psyc*Eleaf(ileaf)/(rhocp*gswv)
+            gbleaf(ileaf) = gbc*1.32*1.075
+            gsleaf(ileaf) = gsw
+
+            ! compare current and previous leaf temperatures
+            if (abs(Tlk1 - Tlk) .le. 0.1) exit
+            if (kr1 .gt. 500) exit
+            ! update leaf temperature
+            Tlk = Tlk1
+            Tleaf(ileaf) = Tlk1 - 273.2
+            kr1 = kr1 + 1
+         end do                          !solution not found yet
+10       continue
+      end do
+      return
+   end subroutine agsean_ngt
 
    ! functions 
    real function sinbet(doy, hour, lat)
