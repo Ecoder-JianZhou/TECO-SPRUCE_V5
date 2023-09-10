@@ -9,8 +9,9 @@ module vegetation
    !           sinbet, esat, VJtemp, fJQres, EnzK
    !=================================================================================
    use datatypes
+   use soil
    implicit none
-
+   
    contains
    subroutine vegn_canopy(vegn, iforcing)
       implicit none
@@ -20,7 +21,9 @@ module vegetation
       integer :: doy, hour, ipft
       real    :: lat, radsol, fbeam, coszen, Radabv(2)
       real    :: Aleaf(2), Eleaf(2), Hleaf(2), gbleaf(2), gsleaf(2) ! from xlayers
-      real    :: Rsoilab1, Rsoilab2, Esoil !from xlayers
+      real    :: Acan1, Acan2, Ecan1, Ecan2, Rsoilab1, Rsoilab2 !, Esoil !from xlayers
+      ! SUMMARY
+      real    :: Acanop, Ecanop
 
       doy    = iforcing%doy
       hour   = iforcing%hour + 1
@@ -31,10 +34,236 @@ module vegetation
 
       do ipft = 1, vegn%npft
          call xlayers(vegn%allSp(ipft), iforcing, fbeam, coszen, Radabv, Aleaf, Eleaf, Hleaf, gbleaf, gsleaf, &
-         Rsoilab1, Rsoilab2, Esoil)
+            Acan1, Acan2, Ecan1, Ecan2, Rsoilab1, Rsoilab2)!, Esoil)
+         Acanop = Acan1 + Acan2
+         Ecanop = Ecan1 + Ecan2
+         vegn%allSp(ipft)%gpp    = Acanop*3600.0*12.0                           ! every hour, g C m-2 h-1
+         vegn%allSp(ipft)%transp = AMAX1(Ecanop*3600.0/(1.0e6*(2.501 - 0.00236*iforcing%Tair)), 0.) ! mm H2O /hour
+         if (ipft .eq. 1) then
+            vegn%gpp    = vegn%allSp(ipft)%gpp
+            vegn%transp = vegn%allSp(ipft)%transp
+            st%Rsoilab1 = (1/vegn%npft)*Rsoilab1
+            st%Rsoilab2 = (1/vegn%npft)*Rsoilab2
+            ! st%Rsoilab3 = (1/npft)*Rsoilab3
+         else
+            vegn%gpp    = vegn%gpp    + vegn%allSp(ipft)%gpp
+            vegn%transp = vegn%transp + vegn%allSp(ipft)%transp
+            st%Rsoilab1 = st%Rsoilab1 + (1/vegn%npft)*Rsoilab1
+            st%Rsoilab2 = st%Rsoilab2 + (1/vegn%npft)*Rsoilab2
+         endif
       enddo 
+      if (do_soilphy) call Tsoil_simu() ! Jian: need modify
+      vegn%evap   = AMAX1(Esoil *3600.0/(1.0e6*(2.501 - 0.00236*Tair)), 0.)  ! Jian: need modify
 
    end subroutine vegn_canopy
+
+   ! -------- autotrophic respiration -----------------------------------------------------------------
+   subroutine respiration(vegn, iforcing)
+      ! calculate plant and soil respiration by the following equation:
+      ! RD=BM*Rd*Q10**((T-25)/10) (Sun et al. 2005. Acta Ecologica Sinica)
+      implicit none
+      type(vegn_tile_type), intent(inout) :: vegn
+      type(forcing_data_type), intent(in) :: iforcing
+
+      integer :: ipft
+      real conv 
+      conv = 3600.*12./1000000.                  ! converter from "umol C /m2/s" to "gC/m2/hour"
+      ! SNRauto =exp(-(CN(1)-CN0(1))/CN0(1))
+
+      do ipft = 1, vegn%npft
+         if (vegn%allSp(ipft)%LAI .gt. vegn%allSp(ipft)%LAImin) then
+            
+            vegn%allSp(ipft)%RmLeaf = vegn%allSp(ipft)%Rl0 * vegn%allSp(ipft)%SNRauto * vegn%allSp(ipft)%bmleaf  * 0.48 * &
+               vegn%allSp(ipft)%SLA * 0.1 * vegn%allSp(ipft)%Q10**((iforcing%Tair - 10.)/10.)*vegn%allSp(ipft)%fnsc*conv
+            vegn%allSp(ipft)%RmStem = vegn%allSp(ipft)%Rs0 * vegn%allSp(ipft)%SNRauto * vegn%allSp(ipft)%StemSap * 0.001* &
+               vegn%allSp(ipft)%Q10**((iforcing%Tair - 25.)/10.)*vegn%allSp(ipft)%fnsc*conv
+            vegn%allSp(ipft)%RmRoot = vegn%allSp(ipft)%Rr0 * vegn%allSp(ipft)%SNRauto * vegn%allSp(ipft)%RootSap * 0.001* & 
+               vegn%allSp(ipft)%Q10**((iforcing%Tair - 25.)/10.)*vegn%allSp(ipft)%fnsc*conv
+         else
+            vegn%allSp(ipft)%RmLeaf = 0.3*vegn%allSp(ipft)%gpp
+            vegn%allSp(ipft)%RmStem = 0.3*vegn%allSp(ipft)%gpp
+            vegn%allSp(ipft)%RmRoot = 0.4*vegn%allSp(ipft)%gpp
+         end if
+         vegn%allSp(ipft)%Rmain = vegn%allSp(ipft)%Rmleaf + vegn%allSp(ipft)%Rmstem + vegn%allSp(ipft)%Rmroot
+         if (vegn%allSp(ipft)%Rmain > 0.0015*vegn%allSp(ipft)%NSC) then             ! If Total autotropic respiration greater than 0.15% of Nonstructure Carbon, rescale.
+            vegn%allSp(ipft)%Rmleaf = vegn%allSp(ipft)%Rmleaf/vegn%allSp(ipft)%Rmain*0.0015*vegn%allSp(ipft)%NSC
+            vegn%allSp(ipft)%Rmstem = vegn%allSp(ipft)%Rmstem/vegn%allSp(ipft)%Rmain*0.0015*vegn%allSp(ipft)%NSC
+            vegn%allSp(ipft)%Rmroot = vegn%allSp(ipft)%Rmstem/vegn%allSp(ipft)%Rmain*0.0015*vegn%allSp(ipft)%NSC
+            vegn%allSp(ipft)%Rmain  = vegn%allSp(ipft)%Rmleaf + vegn%allSp(ipft)%Rmstem + vegn%allSp(ipft)%Rmroot
+         end if
+         ! summary the 
+         if (ipft .eq. 1) then
+            vegn%RmLeaf = vegn%allSp(ipft)%Rmleaf
+            vegn%RmStem = vegn%allSp(ipft)%RmStem
+            vegn%RmRoot = vegn%allSp(ipft)%RmRoot
+            vegn%Rmain  = vegn%allSp(ipft)%Rmain
+         else
+            vegn%RmLeaf = vegn%RmLeaf +  vegn%allSp(ipft)%Rmleaf
+            vegn%RmStem = vegn%RmStem +  vegn%allSp(ipft)%RmStem
+            vegn%RmRoot = vegn%RmRoot +  vegn%allSp(ipft)%RmRoot
+            vegn%Rmain  = vegn%Rmain  +  vegn%allSp(ipft)%Rmain
+         endif
+      enddo
+      return
+   end subroutine respiration
+
+   ! ------------- plant growth model --------------------------------------------------------------------
+   subroutine vegn_plantgrowth(vegn, iforcing)
+      implicit none
+      type(vegn_tile_type), intent(inout) :: vegn
+      type(forcing_data_type), intent(in) :: iforcing
+
+      integer ipft
+      
+      do ipft = 1, vegn%npft
+         call plantgrowth(vegn%allSp(ipft), iforcing)
+         ! if (ipft .eq. 1)then
+            
+      enddo
+   end subroutine vegn_plantgrowth
+
+   subroutine plantgrowth(spec, iforcing)
+      implicit none  ! Jian: RS0 is different from Rs0 from data type
+      type(spec_data_type), intent(inout) :: spec
+      type(forcing_data_type), intent(in) :: iforcing
+
+      ! real store
+      real GrowthP, GrowthL, GrowthR, GrowthS
+      real CNP0, GPmax, acP
+      real bmL, bmR, bmP, bmS !, StemSap, RootSap
+      real Rgroot, Rgleaf, Rgstem !, Rgrowth
+      real, save :: addaccu = 0, GrowthLaccu = 0, GrowthSaccu = 0, GrowthRaccu = 0
+      real scalT, SL_rs, SR_rs, Slai, phiN   !, scalS, scalN
+      real RS, RS_0 ! , RSw
+      real gamma_W, gamma_Wmax, gamma_T, gamma_Tmax, gamma_N
+      real beta_T, Tcold, Twarm, Topt
+      real bW, bT, W
+      ! real L_add, NL_fall, NL_add
+      ! real alpha_St
+      real ht
+
+      Twarm = 35.0
+      Tcold = 5.0         ! Tcold=0.0       ! For SPRUCE
+      Topt  = 30.
+      phiN  = 0.33
+
+      bmL = spec%bmleaf*0.48   ! Carbon
+      bmR = spec%bmRoot*0.48
+      bmS = spec%bmStem*0.48
+
+      if (bmL .lt. spec%NSC/0.333) bmL = spec%NSC/0.333
+      if (bmR .lt. spec%NSC/0.333) bmR = spec%NSC/0.333
+      if (bmS .lt. spec%NSC/0.334) bmS = spec%NSC/0.334
+
+      spec%StemSap = spec%SapS*bmS  ! Weng 12/05/2008
+      spec%RootSap = spec%SapR*bmR
+      if (spec%StemSap .lt. 0.001) spec%StemSap = 0.001
+      if (spec%RootSap .lt. 0.001) spec%RootSap = 0.001
+
+      bmP  = bmL + bmR + bmS                                        ! Plant C biomass
+      acP  = bmL + spec%StemSap + bmS                               ! Plant available sapwood C
+      CNp0 = bmP/(bmL/spec%CN01 + bmR/spec%CN03 + bmS/spec%CN02)            ! Plant CN ratio
+
+      ! hmax = 24.19   ! m
+      ! hl0  = 0.00019  ! m2/kg C
+      ! LAIMAX0 = 6.
+      ! LAIMAX0 = 8.
+      ! la0     = 0.2
+      ht          = spec%hmax*(1.-exp(-spec%hl0*bmP))                              ! Scaling plant C biomass to height
+      spec%LAIMAX = AMAX1(spec%LAIMAX0*(1.-exp(-spec%la0*ht)), spec%LAIMIN + 0.1)  ! Scaling plant height to maximum LAI
+
+      ! Phenology
+      if ((st%GDD5 .gt. spec%gddonset) .and. spec%onset .eq. 0 .and. spec%storage .gt. spec%stor_use) then
+         spec%onset = 1
+      end if
+      if ((spec%onset .eq. 1) .and. (spec%storage .gt. spec%stor_use)) then
+         if (spec%LAI .lt. spec%LAIMAX) spec%add = spec%stor_use !Amin1(stor_use, 0.004*NSN*CNp0)
+         ! if(LAI.lt.LAIMAX)add=stor_use/20.0
+         spec%storage = spec%storage - spec%add
+         ! add = 0
+      else
+         spec%add   = 0.0
+         spec%onset = 0
+      end if
+      if (spec%accumulation .lt. (spec%NSCmax + 0.001*spec%RootSap)) then
+         spec%store = AMAX1(0., 0.0001*spec%NSC)                        ! 0.5% of nonstructure carbon is stored
+      else
+         spec%store = 0.0
+      end if
+      spec%accumulation = spec%accumulation + spec%store
+
+      ! Scalars for plant growth
+      ! Sps=Amin1(1.0,3.33*AMAX1(0.0,1.0 - fnsc))
+      ! Sps   = Sps*(1.-exp(-phiN*NSN))                                                        ! Sps is not assigned previous, something is wrong. -JJJJJJJJJJJJJJJJJJJJJ
+      ! scalS = AMIN1(1.0, 2.*spec%fnsc) ! Ss
+      RS_0  = 1.0
+      RS    = bmR/bmL
+      W     = AMIN1(1.0, 3.333 * st%omega)
+      SL_rs = RS/(RS + RS_0*(2.-W))
+      SR_rs = (RS_0*(2.-W))/(RS + RS_0*(2.-W))
+      Slai  = amin1(1.0, 2.333*(spec%LAIMAX - spec%LAI)/(spec%LAIMAX - spec%LAIMIN))
+      scalT = AMAX1(0.0, 1.0 - exp(-(iforcing%Tair - spec%gddonset/10.)/5.0))  !0.5 !
+      st%scalW = AMIN1(0.5, AMAX1(0.333, 0.333 + st%omega))
+      
+      ! Plant growth and allocation, based on LM3V
+      GPmax   = (spec%GLmax*bmL + spec%GSmax*spec%StemSap + spec%GRmax*bmR)                        !/acP
+      ! Jian: limit the Growth > 0
+      GrowthP = Amax1(AMIN1(GPmax*spec%fnsc*scalT*(1.-exp(-spec%NSN)),0.004*spec%NSC,0.004*spec%NSN*CNp0), 0.) !    ! Jian: GrowthP is used to calculate NPP, which means the minimum of group plant needs and 0.004*NSC, 0.004*NSN*CNp0
+      GrowthL = MAX(0.0, GrowthP*0.5)                                          ! updated when QC leaf and wood changed due to the change of plot area for tree biomass
+      GrowthR = Amax1(MIN(GrowthP*0.4, MAX(0.0, 0.75/st%scalW*bmL - bmR)), 0.)                  ! *c1/(1.+c1+c2)
+      GrowthS = MAX(0.0, GrowthP - (GrowthL + GrowthR))                        ! *c2/(1.+c1+c2)
+
+      spec%npp    = GrowthL + GrowthR + GrowthS + spec%add       ! Modified by Jiang Jiang 2015/10/13
+      addaccu     = addaccu + spec%add
+      GrowthLaccu = GrowthLaccu + GrowthL
+      GrowthRaccu = GrowthRaccu + GrowthR
+      GrowthSaccu = GrowthSaccu + GrowthS
+      
+      if (spec%npp .eq. 0.0) then
+         spec%alpha_L = 0.333
+         spec%alpha_W = 0.333
+         spec%alpha_R = 0.333
+      else
+         spec%alpha_L = (GrowthL + spec%add)/spec%NPP
+         spec%alpha_W = GrowthS/spec%NPP
+         spec%alpha_R = GrowthR/spec%NPP
+      end if
+
+      ! Carbon cost for growth
+      ! Rgrowth,Rgroot,Rgleaf,Rgstem, 0.5 is from IBIS and Amthor, 1984
+      Rgleaf  = 0.5*GrowthL
+      Rgstem  = 0.5*GrowthS
+      Rgroot  = 0.5*GrowthR
+      spec%Rgrowth = Rgleaf + Rgstem + Rgroot
+      ! Leaf litter
+      gamma_Wmax = 0.12/24. ! maxmum leaf fall rate per hour
+      gamma_Tmax = 0.12/24.
+      bW = 4.0
+      bT = 2.0
+      if (iforcing%Tair .gt. (Tcold + 10.)) then
+         beta_T = 1.
+      else
+         if (iforcing%Tair .gt. Tcold) beta_T = (iforcing%Tair - Tcold)/10.
+         if (iforcing%Tair .LE. Tcold) beta_T = 0.0
+      end if
+
+      ! if (spec%tauCLeaf < 8760.) then
+      !    gamma_W = (1.-W)**bW*gamma_Wmax
+      !    gamma_T = (1.-beta_T)**bT*gamma_Tmax
+      ! else
+      !    gamma_W = 0.
+      !    gamma_T = 0.
+      ! end if
+
+      gamma_N = 1.0/spec%tauCLeaf*st%scalW      ! Modify by Jiang Jiang 2015/10/20
+      if (spec%LAI < spec%LAIMIN) then
+         gamma_W = 0.
+         gamma_T = 0.
+         gamma_N = 0.
+      end if
+      spec%L_fall = spec%bmleaf*0.48*gamma_N     ! L_fall=bmleaf*0.48*AMIN1((gamma_T+gamma_N),0.99)
+      return
+   end subroutine plantgrowth
 
    subroutine yrday(doy, hour, lat, radsol, fbeam)  
       ! Jian: This subrontine is used to calculate the fbeam.
@@ -72,7 +301,7 @@ module vegetation
    end subroutine yrday
 
    subroutine xlayers(spec, iforcing, fbeam, coszen, radabv, Aleaf, Eleaf, Hleaf, gbleaf, gsleaf, &
-      Rsoilab1, Rsoilab2, Esoil) 
+      Acan1, Acan2, Ecan1, Ecan2, Rsoilab1, Rsoilab2)!, Esoil) 
       ! the multi-layered canopy model developed by
       ! Ray Leuning with the new radiative transfer scheme
       ! implemented by Y.P. Wang (from Sellers 1986)
@@ -84,7 +313,7 @@ module vegetation
       type(forcing_data_type), intent(in) :: iforcing
       real, intent(in) :: fbeam, coszen, Radabv(2)
       real, intent(inout) :: Aleaf(2), Eleaf(2), Hleaf(2), gbleaf(2), gsleaf(2)
-      real :: Acan1, Acan2, Ecan1, Ecan2, Rsoilab1, Rsoilab2, Esoil    ! outputs
+      real :: Acan1, Acan2, Ecan1, Ecan2, Rsoilab1, Rsoilab2!, Esoil    ! outputs
       
       ! local vars
       real    :: Rnst1 , Rnst2 , Qcan1 , Qcan2  !net rad, sunlit, vis rad
@@ -105,7 +334,7 @@ module vegetation
       real    :: wind, raero, WILTPT, FILDCP, Dair, RH, esat1, eairP
       real    :: TairK, Tlk1, Tlk2, Rsoilab3, Rsoilabs 
       real    :: rhocp, H2OLv, slope, psyc, Cmolar, fw1, Rsoil, rLAI 
-      real    :: Hsoil
+      ! real    :: Hsoil
       integer :: nw, ng
       ! transfer to other subroutine
       real    :: extkd, extkb, flai, kpr(3,2), reff(3,2)
@@ -207,9 +436,9 @@ module vegetation
          eJmxx  = spec%eJmx0*scalex
          if (radabv(1) .ge. 10.0) then                          !check solar Radiation > 10 W/m2
             ! leaf stomata-photosynthesis-transpiration model - daytime
-            call agsean_day(iforcing, windUx, Tleaf)
+            call agsean_day(spec, iforcing, windUx, grdn, Qabs, Rnstar, Vcmxx, eJmxx, Tleaf)
          else
-            call agsean_ngt()
+            call agsean_ngt(spec, iforcing, windUx, grdn, Qabs, Rnstar, Vcmxx, Tleaf)
          end if
          fslt      = exp(-extKb*flai)                        !fraction of sunlit leaves
          fshd      = 1.0 - fslt                                !fraction of shaded leaves
@@ -287,7 +516,7 @@ module vegetation
       ! Rsoilab3=(1-rhoS(3))*Rsoil3
 
       ! Total radiation absorbed by soil
-      Rsoilabs = Rsoilab1 + Rsoilab2 + Rsoilab3
+      Rsoilabs = Rsoilab1 + Rsoilab2 + Rsoilab3       ! Jian: Rsoilabs is re-calcualted in soil module
 
       ! thermodynamic parameters for air
       TairK  = iforcing%Tair + 273.2
@@ -303,10 +532,11 @@ module vegetation
       ! Eleaf(ileaf)=1.0*
       ! &     (slope*Y*Rnstar(ileaf)+rhocp*Dair/(rbH_L+raero))/    !2* Weng 0215
       ! &     (slope*Y+psyc*(rswv+rbw+raero)/(rbH_L+raero))
-      Esoil  = (slope*(Rsoilabs - st%G) + rhocp*Dair/(raero + rLAI))/       &
-               &      (slope + psyc*(rsoil/(raero + rLAI) + 1.))!*omega!*AMIN1(0.5, AMAX1(0.333, 0.333 + omega))
-      ! sensible heat flux into air from soil
-      Hsoil = Rsoilabs - Esoil - st%G  ! Jian: it is also calculated in soil module?
+      ! Jian: seem have no effect in this module, Esoil and Hsoil will be calculated in soil module
+      ! Esoil  = (slope*(Rsoilabs - st%G) + rhocp*Dair/(raero + rLAI))/       &
+      !          &      (slope + psyc*(rsoil/(raero + rLAI) + 1.))!*omega!*AMIN1(0.5, AMAX1(0.333, 0.333 + omega))
+      ! ! sensible heat flux into air from soil
+      ! Hsoil = Rsoilabs - Esoil - st%G  ! Jian: it is also calculated in soil module?
       return
    end subroutine xlayers
 
@@ -397,39 +627,46 @@ module vegetation
       do nw = 1, 2
          Qd0 = (1.-fbeam)*radabv(nw)                    !diffuse incident radiation
          Qb0 = fbeam*radabv(nw)                         !beam incident radiation
-         Qabs(nw, 2) = Qd0*(kpr(nw, 2)*(1.-reff(nw, 2))*exp(-kpr(nw, 2)*FLAI)) +  & !absorbed radiation - shaded leaves, diffuse
-                &      Qb0*(kpr(nw, 1)*(1.-reff(nw, 1))*exp(-kpr(nw, 1)*FLAI)  -  & !beam scattered
+         Qabs(nw, 2) = Qd0*(kpr(nw, 2)*(1.-reff(nw, 2))*exp(-kpr(nw, 2)*FLAI)) +  & ! absorbed radiation - shaded leaves, diffuse
+                &      Qb0*(kpr(nw, 1)*(1.-reff(nw, 1))*exp(-kpr(nw, 1)*FLAI)  -  & ! beam scattered
                 &      extKb*(1.-scatt(nw))*exp(-extKb*FLAI))
          Qabs(nw, 1) = Qabs(nw, 2) + extKb*Qb0*(1.-scatt(nw))                     !absorbed radiation - sunlit leaves
       end do
       return
    end subroutine goudriaan
 
-   subroutine agsean_day(iforcing, windUx, Tleaf)
+   subroutine agsean_day(spec, iforcing, windUx, grdn, Qabs, Rnstar, Vcmxx, eJmxx, Tleaf)
       implicit none
+      type(spec_data_type), intent(inout) :: spec
       type(forcing_data_type), intent(in) :: iforcing
-      real, intent(in) :: windUx
-      real :: Tleaf(2)  ! output?
+      real, intent(in) :: windUx, grdn, Qabs(3,2), Rnstar(2), Vcmxx, eJmxx
+      real :: Tleaf(2), Eleaf(2), Hleaf(2), gbleaf(2), gsleaf(2)  ! output?
       ! local variables
       integer :: kr1, ileaf
       real    :: Gras, gbHf, gbH, rbH, rbw, rbH_L, rrdn, Y
       real    :: gsw, gswv, rswv
-      real    :: TairK, esat1, eairP, RH, Dair 
-      real    :: rhocp, H2OLv, Cmolar
-      real    :: gbHu, Tlk, Dleaf
+      real    :: TairK, Tlk1, esat1, eairP, RH, Dair, wind 
+      real    :: rhocp, H2OLv, Cmolar, raero
+      real    :: gbHu, Tlk, Dleaf, slope, psyc
+      real    :: gbc, gsc0, co2cs, Qapar
+      real    :: Aleaf(2), co2ci(2)
+      ! variables from other subroutine
+      real    :: Aleafx, Gscx
 
       ! thermodynamic parameters for air
       TairK  = iforcing%Tair + 273.2
-      esat1  = 610.78*exp(17.27*Tair/(Tair + 237.3))      ! intermediate parameter
+      esat1  = 610.78*exp(17.27*iforcing%Tair/(iforcing%Tair + 237.3))      ! intermediate parameter
       RH     = AMAX1(0.01,AMIN1(99.99,iforcing%RH))                ! relative humidity
       eairP  = esat1*RH/100.                              ! Added for SPRUCE, due to lack of VPD data. Jian: ? SPRUCE has the data? !air water vapour pressure
       Dair   = esat1-eairP
+      wind   = iforcing%WS
+      if (wind .lt. 0.01) wind = 0.01   ! set windspeed to the minimum speed to avoid zero Gb
+
       rhocp  = cpair*Patm*AirMa/(Rconst*TairK)
       H2OLv  = H2oLv0 - 2.365e3*iforcing%Tair
       slope  = (esat(iforcing%Tair + 0.1) - esat(iforcing%Tair))/0.1
       psyc   = Patm*cpair*AirMa/(H2OLv*H2OMw)
       Cmolar = Patm/(Rconst*TairK)
-      weighJ = 1.0
       ! boundary layer conductance for heat - single sided, forced convection
       ! (Monteith 1973, P106 & notes dated 23/12/94)
       if (windUx/wleaf >= 0.0) then
@@ -437,17 +674,17 @@ module vegetation
       else
          gbHu = 0.003 !*sqrt(-windUx/wleaf)
       end if         ! Weng 10/31/2008
-      ! raero=0.0                  ! aerodynamic resistance s/m
-      do ileaf = 1, 2              ! loop over sunlit and shaded leaves
+      raero = 50./wind                 ! aerodynamic resistance s/m
+      do ileaf = 1, 2                  ! loop over sunlit and shaded leaves
          ! first estimate of leaf temperature - assume air temp
          Tleaf(ileaf) = iforcing%Tair
-         Tlk = Tleaf(ileaf) + 273.2    !Tleaf to deg K
+         Tlk = Tleaf(ileaf) + 273.2    ! Tleaf to deg K
          ! first estimate of deficit at leaf surface - assume Da
-         Dleaf = Dair                !Pa
+         Dleaf = Dair                  ! Pa
          ! first estimate for co2cs
-         co2cs = co2ca               !mol/mol
+         co2cs = co2ca                 ! mol/mol
          Qapar = (4.6e-6)*Qabs(1, ileaf)
-         ! ********************************************************************
+         ! --------------------------------------------------------------
          kr1 = 0                     !iteration counter for LE
          ! return point for evaporation iteration
          do ! iteration for leaf temperature
@@ -458,19 +695,16 @@ module vegetation
             rbH    = 1./gbH                            !b/l resistance to heat transfer
             rbw    = 0.93*rbH                          !b/l resistance to water vapour
             ! Y factor for leaf: stom_n = 1.0 for hypostomatous leaf;  stom_n = 2.0 for amphistomatous leaf
-            rbH_L  = rbH*stom_n/2.                   !final b/l resistance for heat
+            rbH_L  = rbH*spec%stom_n/2.                   !final b/l resistance for heat
             rrdn   = 1./grdn
             Y      = 1./(1.+(rbH_L + raero)/rrdn)
             ! boundary layer conductance for CO2 - single side only (mol/m2/s)
             gbc    = Cmolar*gbH/1.32            !mol/m2/s
             gsc0   = gsw0/1.57                 !convert conductance for H2O to that for CO2
-            varQc  = 0.0
-            weighR = 1.0
+            ! varQc  = 0.0
             ! -------------------------------------------
-            ! write(*,*)"test ileaf: ", ileaf
-            ! write(*,*)"before photosyn: ", Gbc, fwsoil, Vcmxx
-            ! write(*,*)"before photosyn2: ", Cmolar, gbH, gbHu, gbHf, Dheat,Gras, wleaf
-            call photosyn()  !outputs
+            call photosyn(spec, co2cs, Qapar, Vcmxx, Tlk, gsc0, eJmxx, Dleaf, Gbc, &
+                           Aleafx, Gscx)  !outputs: Aleafx
             ! choose smaller of Ac, Aq
                
             Aleaf(ileaf) = Aleafx      !0.7 Weng 3/22/2006          !mol CO2/m2/s
@@ -482,8 +716,8 @@ module vegetation
             gswv = gsw/Cmolar                           !gsw in m/s
             rswv = 1./gswv
             ! calculate evap'n using combination equation with current estimate of gsw
-            Eleaf(ileaf) = 1.0*(slope*Y*Rnstar(ileaf) + rhocp*Dair/(rbH_L + raero))/    &   !2* Weng 0215
-                           & (slope*Y + psyc*(rswv + rbw + raero)/(rbH_L + raero))!*omega!*AMIN1(0.5, AMAX1(0.333, 0.333 + omega))!*(0.08+(1.-0.08)* Amin1(1.0, 0.3*omega))
+            Eleaf(ileaf) = 1.0*(slope*Y*Rnstar(ileaf) + rhocp*Dair/(rbH_L + raero))/   &   !2* Weng 0215
+                           & (slope*Y + psyc*(rswv + rbw + raero)/(rbH_L + raero))   !*omega!*AMIN1(0.5, AMAX1(0.333, 0.333 + omega))!*(0.08+(1.-0.08)* Amin1(1.0, 0.3*omega))
             ! calculate sensible heat flux
             Hleaf(ileaf) = Y*(Rnstar(ileaf) - Eleaf(ileaf))
             ! calculate new leaf temperature (K)
@@ -514,28 +748,52 @@ module vegetation
    end subroutine agsean_day
 
    ! -------------------------------------------------------------------------
-   subroutine agsean_ngt()
-      ! implicit real (a-z)
-      integer kr1, ileaf
-      real Gras, gbHf, gbH, rbH, rbw, rbH_L, rrdn, Y
-      real gsw, gswv, rswv
-      real gsc
+   subroutine agsean_ngt(spec, iforcing, windUx, grdn, Qabs, Rnstar, Vcmxx, Tleaf)
+      implicit none
+      type(spec_data_type), intent(inout) :: spec
+      type(forcing_data_type), intent(in) :: iforcing
+      real, intent(in) :: windUx, grdn, Qabs(3,2), Rnstar(2), Vcmxx
+      real :: Tleaf(2), Eleaf(2), Hleaf(2), gbleaf(2), gsleaf(2)  ! output?
+      ! local variables
+      integer :: kr1, ileaf
+      real    :: Gras, gbHf, gbH, rbH, rbw, rbH_L, rrdn, Y
+      real    :: gsw, gswv, rswv
+      real    :: TairK, Tlk1, esat1, eairP, RH, Dair, wind
+      real    :: rhocp, H2OLv, Cmolar, raero
+      real    :: gbHu, Tlk, Dleaf, slope, psyc
+      real    :: gbc, gsc0, co2cs, Qapar, gsc
+      real    :: Aleaf(2), co2ci(2)
+      ! variables from other subroutine
+      real    :: Aleafx
+      
+      ! integer kr1, ileaf
+      ! real Gras, gbHf, gbH, rbH, rbw, rbH_L, rrdn, Y
+      ! real gsw, gswv, rswv
+      ! real gsc
       ! thermodynamic parameters for air
 
-      TairK = Tair + 273.2
+      TairK = iforcing%Tair + 273.2
+      esat1  = 610.78*exp(17.27*iforcing%Tair/(iforcing%Tair + 237.3))      ! intermediate parameter
+      RH     = AMAX1(0.01,AMIN1(99.99,iforcing%RH))                ! relative humidity
+      eairP  = esat1*RH/100.                              ! Added for SPRUCE, due to lack of VPD data. Jian: ? SPRUCE has the data? !air water vapour pressure
+      Dair   = esat1-eairP
+      wind   = iforcing%WS
+      if (wind .lt. 0.01) wind = 0.01   ! set windspeed to the minimum speed to avoid zero Gb
+
       rhocp = cpair*Patm*AirMa/(Rconst*TairK)
-      H2OLv = H2oLv0 - 2.365e3*Tair
-      slope = (esat(Tair + 0.1) - esat(Tair))/0.1
+      H2OLv = H2oLv0 - 2.365e3*iforcing%Tair
+      slope = (esat(iforcing%Tair + 0.1) - esat(iforcing%Tair))/0.1
       psyc = Patm*cpair*AirMa/(H2OLv*H2OMw)
       Cmolar = Patm/(Rconst*TairK)
-      weighJ = 1.0
+      ! weighJ = 1.0
       ! boundary layer conductance for heat - single sided, forced convection
       ! (Monteith 1973, P106 & notes dated 23/12/94)
       gbHu = 0.003*sqrt(windUx/wleaf)    !m/s
       ! raero=0.0                        !aerodynamic resistance s/m
+      raero = 50./wind                 ! aerodynamic resistance s/m
       do ileaf = 1, 2                  ! loop over sunlit and shaded leaves
          ! first estimate of leaf temperature - assume air temp
-         Tleaf(ileaf) = Tair
+         Tleaf(ileaf) = iforcing%Tair
          Tlk = Tleaf(ileaf) + 273.2    !Tleaf to deg K
          ! first estimate of deficit at leaf surface - assume Da
          Dleaf = Dair                !Pa
@@ -547,26 +805,25 @@ module vegetation
          do
             !100        continue !    return point for evaporation iteration
             ! single-sided boundary layer conductance - free convection (see notes 23/12/94)
-            Gras = 1.595e8*abs(Tleaf(ileaf) - Tair)*(wleaf**3)     !Grashof
+            Gras = 1.595e8*abs(Tleaf(ileaf) - iforcing%Tair)*(wleaf**3)     !Grashof
             gbHf = 0.5*Dheat*(Gras**0.25)/wleaf
             gbH = gbHu + gbHf                         !m/s
             rbH = 1./gbH                            !b/l resistance to heat transfer
             rbw = 0.93*rbH                          !b/l resistance to water vapour
             ! Y factor for leaf: stom_n = 1.0 for hypostomatous leaf;  stom_n = 2.0 for amphistomatous leaf
-            rbH_L = rbH*stom_n/2.                   !final b/l resistance for heat
+            rbH_L = rbH*spec%stom_n/2.                   !final b/l resistance for heat
             rrdn = 1./grdn
             Y = 1./(1.+(rbH_L + raero)/rrdn)
             ! boundary layer conductance for CO2 - single side only (mol/m2/s)
             gbc = Cmolar*gbH/1.32            !mol/m2/s
             gsc0 = gsw0/1.57                        !convert conductance for H2O to that for CO2
-            varQc = 0.0
-            weighR = 1.0
+            ! varQc = 0.0
+            ! weighR = 1.0
             ! respiration
             Aleafx = -0.0089*Vcmxx*exp(0.069*(Tlk - 293.2))
             gsc = gsc0
             ! choose smaller of Ac, Aq
             if (ISNAN(Aleafx)) then
-               
                stop
             endif
             Aleaf(ileaf) = Aleafx                     !mol CO2/m2/s
@@ -583,7 +840,7 @@ module vegetation
             ! calculate sensible heat flux
             Hleaf(ileaf) = Y*(Rnstar(ileaf) - Eleaf(ileaf))
             ! calculate new leaf temperature (K)
-            Tlk1 = 273.2 + Tair + Hleaf(ileaf)*(rbH/2.+raero)/rhocp
+            Tlk1 = 273.2 + iforcing%Tair + Hleaf(ileaf)*(rbH/2.+raero)/rhocp
             ! calculate Dleaf use LE=(rhocp/psyc)*gsw*Ds
             Dleaf = psyc*Eleaf(ileaf)/(rhocp*gswv)
             gbleaf(ileaf) = gbc*1.32*1.075
@@ -597,10 +854,116 @@ module vegetation
             Tleaf(ileaf) = Tlk1 - 273.2
             kr1 = kr1 + 1
          end do                          !solution not found yet
-10       continue
+! 10       continue
       end do
       return
    end subroutine agsean_ngt
+
+   subroutine photosyn(spec, co2cs, Qapar, Vcmxx, Tlk, gsc0, eJmxx, Dleaf, Gbc, &
+      Aleafx, Gscx)
+      implicit none
+      type(spec_data_type), intent(inout) :: spec
+      real, intent(in) :: co2cs, Qapar, Vcmxx, Tlk, gsc0, eJmxx
+      real, intent(in) :: Dleaf, Gbc
+
+      ! outputs
+      real :: Aleafx, Gscx
+      ! calculate Vcmax, Jmax at leaf temp (Eq 9, Harley et al 1992)
+      ! turned on by Weng, 2012-03-13
+      ! VcmxT = Vjmax(Tlkx,Trefk,Vcmx1,Eavm,Edvm,Rconst,Entrpy)
+      ! eJmxT = Vjmax(Tlkx,Trefk,eJmx1,Eajm,Edjm,Rconst,Entrpy)
+      ! -------------------------------------------------------
+
+      ! local variables
+      real :: weighJ, weighR, a1
+      real :: CO2Csx
+      real :: TminV, TmaxV, ToptV, TminJ, TmaxJ, ToptJ, Tlf
+      real :: VcmxT, eJmxT, eJ
+      real :: conKcT, conKoT
+      real :: Rd, Tdiff, gammas, gamma
+      real :: X, Gma, Bta
+      real :: Acx, Aqx ! from ciandA
+
+      CO2Csx = AMAX1(CO2Cs, 0.6*CO2Ca)
+      ! check if it is dark - if so calculate respiration and g0 to assign conductance
+      if (Qapar .le. 0.) then                            !night, umol quanta/m2/s
+         Aleafx = -0.0089*Vcmxx*exp(0.069*(Tlk - 293.2))   ! original: 0.0089 Weng 3/22/2006
+         Gscx = gsc0
+      end if
+      ! calculate  Vcmax, Jmax at leaf temp using Reed et al (1976) function J appl Ecol 13:925
+      TminV = spec%gddonset/10.  ! original -5.        !-Jiang Jiang 2015/10/13
+      TmaxV = 50.
+      ToptV = 35.
+
+      TminJ = TminV
+      TmaxJ = TmaxV
+      ToptJ = ToptV
+
+      Tlf = Tlk - 273.2
+      VcmxT = VJtemp(Tlf, TminV, TmaxV, ToptV, Vcmxx)
+      eJmxT = VJtemp(Tlf, TminJ, TmaxJ, ToptJ, eJmxx)
+      ! calculate J, the asymptote for RuBP regeneration rate at given Q
+      weighJ = 1.0
+      weighR = 1.0
+      eJ = weighJ*fJQres(eJmxT, spec%alpha, Qapar, theta)
+      ! calculate Kc, Ko, Rd gamma*  & gamma at leaf temp
+      conKcT = EnzK(Tlk, Trefk, conKc0, Rconst, Ekc)
+      conKoT = EnzK(Tlk, Trefk, conKo0, Rconst, Eko)
+      ! following de Pury 1994, eq 7, make light respiration a fixed proportion of Vcmax
+      Rd     = 0.0089*VcmxT*weighR                              !de Pury 1994, Eq7
+      Tdiff  = Tlk - Trefk
+      gammas = gam0*(1.+gam1*Tdiff + gam2*Tdiff*Tdiff)       !gamma*
+      ! gamma = (gammas+conKcT*(1.+O2ci/conKoT)*Rd/VcmxT)/(1.-Rd/VcmxT)
+      gamma = 0.0
+      ! ***********************************************************************
+      ! Analytical solution for ci. This is the ci which satisfies supply and demand
+      ! functions simultaneously
+      ! calculate X using Lohammer model, and scale for soil moisture
+      a1 = 1./(1.-0.7)
+      X = a1*st%fwsoil/((co2csx - gamma)*(1.0 + Dleaf/spec%Ds0))
+      ! calculate solution for ci when Rubisco activity limits A
+      Gma = VcmxT
+      Bta = conKcT*(1.0 + o2ci/conKoT)
+
+      call ciandA(Gma, Bta, gsc0, X, Rd, co2Csx, gammas, Acx)
+      ! calculate +ve root for ci when RuBP regeneration limits A
+      Gma = eJ/4.
+      Bta = 2.*gammas
+      ! calculate coefficients for quadratic equation for ci
+      call ciandA(Gma, Bta, gsc0, X, Rd, co2Csx, gammas, Aqx)
+      ! choose smaller of Ac, Aq
+      ! sps = AMAX1(0.001, sps)                  !Weng, 3/30/2006
+      Aleafx = (amin1(Acx, Aqx) - Rd) !*sps     ! Weng 4/4/2006
+
+      ! if(Aleafx.lt.0.0) Aleafx=0.0    ! by Weng 3/21/2006
+      ! calculate new values for gsc, cs (Lohammer model)
+      CO2csx = co2ca - Aleafx/Gbc
+      Gscx = gsc0 + X*Aleafx  ! revised by Weng
+      return
+   end subroutine photosyn
+
+   subroutine ciandA(Gma,Bta,g0,X,Rd,co2Csx,gammas,Aquad)      ! Gma,Bta,g0,X,Rd,co2Cs,gammas,ciquad,Aquad
+      real Gma,Bta,g0,X,Rd,co2Csx,gammas,ciquad,Aquad
+      real b2, b1, b0, bx
+      ! calculate coefficients for quadratic equation for ci
+      b2 =  g0 + X*(Gma - Rd)
+      b1 =  (1.-co2Csx*X)*(Gma - Rd) + g0*(Bta - co2Csx) - X*(Gma*gammas + Bta*Rd)
+      b0 = -(1.-co2Csx*X)*(Gma*gammas + Bta*Rd) - g0*Bta*co2Csx
+
+      bx = b1*b1 - 4.*b2*b0
+      if (bx .gt. 0.0) then
+         ! calculate larger root of quadratic
+         ciquad = (-b1 + sqrt(bx))/(2.*b2)
+      end if
+
+      IF (ciquad .lt. 0 .or. bx .lt. 0.) THEN
+         Aquad = 0.0
+         ciquad = 0.7*co2Csx
+      ELSE
+         Aquad = Gma*(ciquad - gammas)/(ciquad + Bta)
+      END IF
+      return
+   end
 
    ! functions 
    real function sinbet(doy, hour, lat)
@@ -627,6 +990,47 @@ module vegetation
       real T
       ! returns saturation vapour pressure in Pa
       esat = 610.78*exp(17.27*T/(T + 237.3))
+      return
+   end
+
+   ! ****************************************************************************
+   ! Reed et al (1976, J appl Ecol 13:925) equation for temperature response
+   ! used for Vcmax and Jmax
+   real function VJtemp(Tlf,TminVJ,TmaxVJ,ToptVJ,VJmax0)
+      real Tlf,TminVJ,TmaxVJ,ToptVJ,VJmax0
+      real pwr
+      if (Tlf .lt. TminVJ) Tlf = TminVJ   !constrain leaf temperatures between min and max
+      if (Tlf .gt. TmaxVJ) Tlf = TmaxVJ
+      pwr    = (TmaxVJ - ToptVJ)/(ToptVj - TminVj)
+      VJtemp = VJmax0*((Tlf - TminVJ)/(ToptVJ - TminVJ))*     &
+               &       ((TmaxVJ - Tlf)/(TmaxVJ - ToptVJ))**pwr
+      return
+   end
+
+   ! ****************************************************************************
+   real function fJQres(eJmx,alpha,Q,theta)
+      real eJmx,alpha,Q,theta
+      real AX, BX, CX
+      AX = theta                                 !a term in J fn
+      BX = alpha*Q + eJmx                          !b term in J fn
+      CX = alpha*Q*eJmx                          !c term in J fn
+      if ((BX*BX - 4.*AX*CX) >= 0.0) then
+         fJQres = (BX - SQRT(BX*BX - 4.*AX*CX))/(2*AX)
+      else
+         fJQres = (BX)/(2*AX)                   !Weng 10/31/2008
+      end if
+      return
+   end
+   ! *************************************************************************
+   real function EnzK(Tk,Trefk,EnzK0,Rconst,Eactiv)
+      real Tk,Trefk,EnzK0,Rconst,Eactiv
+      real temp1 
+      temp1 = (Eactiv/(Rconst*Trefk))*(1.-Trefk/Tk)
+      ! if (temp1<50.)then
+      EnzK = EnzK0*EXP((Eactiv/(Rconst*Trefk))*(1.-Trefk/Tk))
+      ! else
+      ! EnzK = EnzK0*EXP(50.)                                          ! Weng 10/31/2008
+      ! endif
       return
    end
 

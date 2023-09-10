@@ -102,39 +102,120 @@ module datatypes
         real    :: Ndep
     end type forcing_data_type
     type(forcing_data_type), allocatable, save :: forcing(:)
+    real :: co2ca
 
     type site_data_type   ! data use in this model, but the common parameters in this site
+        integer:: lat, lon
         real :: wsmax
         real :: wsmin
         real :: extkU
         real :: G
+        real :: GDD5
+        real :: rdepth
+        real :: Q10pro
+        real :: r_me
+        real :: Toxi
+        real :: Omax
+        real :: kCH4
+        real :: CH4_thre
+        real :: Tveg
+        real :: f
+        real :: bubprob
+        real :: Vmaxfraction  
+        ! some environmental variables
+        real :: Dair, raero, Tsoill(10), Tsnow, depth_ex, ta, rain_d
+        real :: tsoil_layer(11)
+        real :: Twater, Tice, snow_dsim, dcount, sublim, fsub
+        real :: resht, fa, decay_m, rho_snow
+        real :: dpatm
         ! state variables
-        real :: wcl(10)
+        real :: depth(nlayers), THKSL(nlayers), FRLEN(10)
+        real :: wcl(10), ice(10), wsc(10), liq_water(10), zwt
+        real :: fwsoil, topfws, omega, scalW
+        real :: Rsoilab1, Rsoilab2, Rsoilab3, Rsoilabs
+        real :: melt, infilt, runoff
+        real :: evap
+        real :: diff_snow, condu_snow, shcap_snow, diff_s, condu_b
+        real :: water_tw, ice_tw, snow_depth, albedo_snow
+        real :: thd_snow_depth, dcount_soil, sftmp
+        ! energy
+        real :: Esoil, Hsoil
+        ! soil flux
+        real :: Rhetero, Rh_pools(5) 
+        ! methane
+        real :: simuCH4, Pro_sum, CH4(nlayers), Oxi_sum, CH4_V(nlayers)
+        real :: Tpro_me, pwater(nlayers), presP(nlayers), Vp(nlayers) 
+        real :: methanebP(nlayers), methaneP(nlayers)
+        real :: bubble_methane_tot, Nbub
     end type site_data_type
     type(site_data_type) :: st
 
     ! pft data type for different species
     type spec_data_type
         real :: LAI
+        ! special paramaters for different species
+        real :: LAImin
+        real :: LAImax
+        real :: SLA
         real :: xfang
         real :: Vcmx0 
         real :: Vcmax0    ! fixed value from namelist
         real :: eJmx0
         real :: gddonset
         real :: stom_n
+        real :: alpha
+        real :: Ds0
+        real :: Rl0
+        real :: Rs0
+        real :: Rr0
+        real :: Q10
+        real :: SapS, SapR
+        real :: hmax            ! in plant growth hmax = 24.19   ! m
+        real :: hl0             ! in plant growth hl0  = 0.00019  ! m2/kg C
+        real :: LAIMAX0         ! in plant growth LAIMAX0 = 8.    ! maybe the LAImax
+        real :: la0             ! in plant growht la0     = 0.2
+        real :: GLmax, GSmax, GRmax
         ! flux 
-        real :: gpp
+        real :: gpp, npp
         real :: transp
         real :: evap
+        real :: RmLeaf, RmStem, RmRoot, Rmain
+        real :: Rgrowth
+        ! states
+        real :: QC1,  QC2,  QC3,  QC4,  QC5             ! leaf, stem, root, Litm, Lits
+        real :: CN01, CN02, CN03, CN04, CN05
+        real :: bmleaf, bmstem, bmroot, bmplant 
+        real :: StemSap,RootSap, NSC, NSCmax, add
+        real :: storage, stor_use, accumulation, store
+        real :: L_fall
+        ! special cycle 
+        real :: tauCLeaf, tauCStem, tauCRoot
+        ! N scalar
+        real :: SNvcmax, SNgrowth, SNRauto
+        real :: fnsc, NSN
+        ! 
+        integer :: onset
+        real :: alpha_L, alpha_W, alpha_R
+        ! energy
+        real :: QLleaf
     end type spec_data_type
 
     type vegn_tile_type
         integer :: npft
         type(spec_data_type), allocatable :: allSp(:)
+        real :: LAI
+        real :: LAImin
+        real :: LAImax
         ! total flux
         real :: gpp
         real :: transp
         real :: evap
+        real :: RmLeaf, RmStem, RmRoot, Rmain
+        ! states
+        real :: bmleaf, bmstem, bmroot, bmplant
+        real :: NSC
+        ! energy
+        real :: QLleaf, Rsoilab1, Rsoilab2
     end type vegn_tile_type
 
     ! some parameters, may be in species, may be in cycle
@@ -179,6 +260,7 @@ module datatypes
         ! other
         real, allocatable :: lai(:)                     ! m2 m-2, Leaf area index
     end type spec_outvars_type
+
     ! total outputs
     type outvars_data_type
         type(spec_data_type), allocatable :: allSpec(:)
