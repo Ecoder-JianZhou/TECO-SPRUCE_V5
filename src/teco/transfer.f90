@@ -297,6 +297,9 @@ module transfer
                 st%QN(1) = vegn%allSp(ipft)%QN(1)
                 st%QN(2) = vegn%allSp(ipft)%QN(2)
                 st%QN(3) = vegn%allSp(ipft)%QN(3)
+                vegn%N_leaf = vegn%allSp(ipft)%N_leaf
+                vegn%N_wood = vegn%allSp(ipft)%N_wood
+                vegn%N_root = vegn%allSp(ipft)%N_root
             else
                 st%QC(1) = st%QC(1) + vegn%allSp(ipft)%QC(1)
                 st%QC(2) = st%QC(2) + vegn%allSp(ipft)%QC(2)
@@ -305,6 +308,9 @@ module transfer
                 st%QN(1) = st%QN(1) + vegn%allSp(ipft)%QN(1)
                 st%QN(2) = st%QN(2) + vegn%allSp(ipft)%QN(2)
                 st%QN(3) = st%QN(3) + vegn%allSp(ipft)%QN(3)
+                vegn%N_leaf = vegn%N_leaf + vegn%allSp(ipft)%N_leaf
+                vegn%N_wood = vegn%N_wood + vegn%allSp(ipft)%N_wood
+                vegn%N_root = vegn%N_root + vegn%allSp(ipft)%N_root
             endif
         enddo
         st%QC(4) = st%QC(4) - st%OutC(4) + st%OutC(1) + st%etaW*st%OutC(2)+st%OutC(3)

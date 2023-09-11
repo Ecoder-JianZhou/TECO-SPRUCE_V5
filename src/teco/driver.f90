@@ -14,13 +14,13 @@ module driver
         ! vegn%NSN
         integer year0, first_year                               ! year0: record the current year to judge whether a new year
         real    Difference                                      ! GPP-Rauto-NPP. Jian: no sure whether for balance? 
-        real    RaLeaf,RaStem,RaRoot                            ! for summary the automatic respiration of leaf, stem, root
-        integer dlayer                                          ! to run cycle of each layer.
-        real    Q_soil                                          ! total soil carbon
-        real    RECOh                                           ! ecosytem respiration
-        real    ETh, Th, Eh                                     ! record hourly ET, transp, evap. Jian: why not use original variable?
-        real    INTh,ROh,DRAINh,LEh,SHh                         ! 
-        real    VPDh, LWH
+        ! real    RaLeaf,RaStem,RaRoot                            ! for summary the automatic respiration of leaf, stem, root
+        ! integer dlayer                                          ! to run cycle of each layer.
+        ! real    Q_soil                                          ! total soil carbon
+        ! real    RECOh                                           ! ecosytem respiration
+        ! real    ETh, Th, Eh                                     ! record hourly ET, transp, evap. Jian: why not use original variable?
+        ! real    INTh,ROh,DRAINh,LEh,SHh                         ! 
+        ! real    VPDh, LWH
         real    esat1, eairP
         integer :: iclim, iyear, iday, ihour
         integer :: iTotHourly, iTotDaily, iTotMonthly
@@ -208,9 +208,21 @@ module driver
                 if (ipft .eq. 1) then
                     vegn%Rauto = vegn%allSp(ipft)%Rauto
                     vegn%gpp   = vegn%allSp(ipft)%gpp
+                    vegn%npp   = vegn%allSp(ipft)%npp
+                    vegn%NPP_L = vegn%allSp(ipft)%NPP_L
+                    vegn%NPP_W = vegn%allSp(ipft)%NPP_W
+                    vegn%NPP_R = vegn%allSp(ipft)%NPP_R
+                    vegn%Rgrowth = vegn%allSp(ipft)%Rgrowth
+                    st%Rnitrogen = vegn%allSp(ipft)%Rnitrogen
                 else
                     vegn%Rauto = vegn%Rauto + vegn%allSp(ipft)%Rauto
                     vegn%gpp   = vegn%gpp   + vegn%allSp(ipft)%gpp
+                    vegn%npp   = vegn%npp   + vegn%allSp(ipft)%npp
+                    vegn%NPP_L = vegn%NPP_L + vegn%allSp(ipft)%NPP_L
+                    vegn%NPP_W = vegn%NPP_W + vegn%allSp(ipft)%NPP_W
+                    vegn%NPP_R = vegn%NPP_R + vegn%allSp(ipft)%NPP_R
+                    vegn%Rgrowth = vegn%Rgrowth + vegn%allSp(ipft)%Rgrowth
+                    st%Rnitrogen = st%Rnitrogen + vegn%allSp(ipft)%Rnitrogen
                 endif
             enddo 
 

@@ -269,11 +269,11 @@ module vegetation
    end subroutine plantgrowth
 
    subroutine yrday(doy, hour, lat, radsol, fbeam)  
-      ! Jian: This subrontine is used to calculate the fbeam.
+      ! Jian: This subroutine is used to calculate the fbeam.
       integer, intent(in) :: doy, hour
       real, intent(in)    :: lat, radsol
       real, intent(out)   :: fbeam
-      ! parameters in this subrontine 
+      ! parameters in this subroutine 
       real pidiv, slatx, sindec, cosdec
       real a, b, sinbet0, solext, tmprat, tmpR, tmpK, fdiff
 
@@ -344,7 +344,7 @@ module vegetation
       real    :: windUx, Vcmxx, eJmxx
       real    :: QLair, QLleaf ! to Tsoil_simu
       real    :: QLsoil ! same in soil module
-      ! calculate in other subrontines
+      ! calculate in other subroutines
       real    :: emair, Qabs(3,2), Rnstar(2), grdn
       real    :: Tleaf(2)
       
@@ -873,8 +873,7 @@ module vegetation
       real :: Aleafx, Gscx
       ! calculate Vcmax, Jmax at leaf temp (Eq 9, Harley et al 1992)
       ! turned on by Weng, 2012-03-13
-      ! VcmxT = Vjmax(Tlkx,Trefk,Vcmx1,Eavm,Edvm,Rconst,Entrpy)
-      ! eJmxT = Vjmax(Tlkx,Trefk,eJmx1,Eajm,Edjm,Rconst,Entrpy)
+
       ! -------------------------------------------------------
 
       ! local variables
@@ -887,6 +886,8 @@ module vegetation
       real :: X, Gma, Bta
       real :: Acx, Aqx ! from ciandA
 
+      VcmxT = Vjmax(Tlk,Trefk,Vcmxx,Eavm,Edvm,Rconst,spec%Entrpy)
+      eJmxT = Vjmax(Tlk,Trefk,eJmxx,Eajm,Edjm,Rconst,spec%Entrpy)
       CO2Csx = AMAX1(CO2Cs, 0.6*CO2Ca)
       ! check if it is dark - if so calculate respiration and g0 to assign conductance
       if (Qapar .le. 0.) then                            !night, umol quanta/m2/s
@@ -903,8 +904,8 @@ module vegetation
       ToptJ = ToptV
 
       Tlf = Tlk - 273.2
-      VcmxT = VJtemp(Tlf, TminV, TmaxV, ToptV, Vcmxx)
-      eJmxT = VJtemp(Tlf, TminJ, TmaxJ, ToptJ, eJmxx)
+      ! VcmxT = VJtemp(Tlf, TminV, TmaxV, ToptV, Vcmxx)
+      ! eJmxT = VJtemp(Tlf, TminJ, TmaxJ, ToptJ, eJmxx)
       ! calculate J, the asymptote for RuBP regeneration rate at given Q
       weighJ = 1.0
       weighR = 1.0
@@ -1007,6 +1008,14 @@ module vegetation
       pwr    = (TmaxVJ - ToptVJ)/(ToptVj - TminVj)
       VJtemp = VJmax0*((Tlf - TminVJ)/(ToptVJ - TminVJ))*     &
                &       ((TmaxVJ - Tlf)/(TmaxVJ - ToptVJ))**pwr
+      return
+   end
+   !****************************************************************************
+   real function Vjmax(Tk,Trefk,Vjmax0,Eactiv,Edeact,Rconst,Entrop)
+      real :: Tk,Trefk,Vjmax0,Eactiv,Edeact,Rconst,Entrop
+      anum = Vjmax0*EXP((Eactiv/(Rconst*Trefk))*(1.-Trefk/Tk))
+      aden = 1. + EXP((Entrop*Tk-Edeact)/(Rconst*Tk))
+      Vjmax = anum/aden
       return
    end
 
