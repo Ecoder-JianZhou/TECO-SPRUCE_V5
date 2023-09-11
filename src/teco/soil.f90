@@ -20,7 +20,6 @@ module soil
         real zmax,thetasmin,zthetasmin,az
         real zwt1,zwt2,zwt3
         real fw(10), ome(10)
-        real test_a, test_b
         real :: FLDCAP, WILTPT_x, phi  ! Jian: use WILTPT_x replace the WILTPT
 
         infilt_max = 15.
@@ -100,10 +99,8 @@ module soil
             endif        
         enddo
 
-        ! write(*,*)"test_wsc: ", wsc(1),(wcl(1)-WILTPT_x)*THKSL(1)*10.0, wcl(1),WILTPT_x,THKSL(1)
         supply = 0.0
         demand = 0.0
-        test_a = 0.0
         do i=1,9
             if(omegaL(i).gt.0.3)then
                 supply      = st%wsc(i)*(omegaL(i)-0.3)   ! supply=wsc(i)*omegaL(i)
@@ -113,9 +110,6 @@ module soil
                 st%wsc(i+1) = st%wsc(i+1)+ exchangeL
                 st%wcl(i)   = st%wsc(i)/(st%THKSL(i)*10.0)+WILTPT_x
                 st%wcl(i+1) = st%wsc(i+1)/(st%THKSL(i+1)*10.0)+WILTPT_x
-                if (i .eq. 1)then
-                    test_a = exchangeL
-                endif
             endif
         enddo
         
@@ -568,7 +562,7 @@ module soil
         ! real r_me         !release ratio of CH4 to CO2
         ! real Q10pro
         real fSTP(nlayers)         !CH4 production factor of soil temperature
-        real vt,xt
+        ! real vt,xt
         real Tmax_me!,Tpro_me
         real fpH          !CH4 production factor of soil pH
         real fEhP         !CH4 production factor of soil redox potential
@@ -1220,7 +1214,7 @@ module soil
         ! concentration difference between pore water and bubble surface
         dc = (mCwP - met_alphaP(i) * st%f * st%presP(i)/(Rgas * tempP(i))) !  Shuang this is part 2 of equation (5)
 
-        if (st%Vp(i) == 0) then										!Shuang equation (6)
+        if (st%Vp(i) == 0) then           !Shuang equation (6)
         ! creating a bubble from the excess CH4
         if (dc > 0) then
         ! making sure that CH4 exchange FROM bubble TO water does not exist when there is no bubble
@@ -1236,7 +1230,7 @@ module soil
         ! growing the bubble only if it already exists
 
         ! radius of one bubble (m)
-        r = (3.0/4.0 * st%Vp(i)/st%Nbub/pi)**(1.0/3.0)		! r updated with Vp, calculated from the last time step in EBG
+        r = (3.0/4.0 * st%Vp(i)/st%Nbub/pi)**(1.0/3.0)     ! r updated with Vp, calculated from the last time step in EBG
 
         ! CH4 diffusion coefficient in water & peat mixture
         !          Dw = methane_D_water(tempP(i)) !this function outputs Dw
@@ -1250,7 +1244,7 @@ module soil
         !          write (*,*) 'mrateP(i)',mrateP(i),'r',r,'dc',dc
         !            write (*,*) 'Vp/=0 i',i, 'mrateP(i)',mrateP(i)
         ! Nbub bubbles
-        mrateP(i) = mrateP(i) * st%Nbub			!mol s-1
+        mrateP(i) = mrateP(i) * st%Nbub      !mol s-1
         end if
         ! ***** end of #6. methane_to_bubble output is mrateP = mebu_rateP = methane_d=met_d
         !******************************************************************************
@@ -1269,8 +1263,8 @@ module soil
 
         ! ***** #8. *********************************************************************
         ! pore water CH4 concentration change rate due to interaction with bubbles    negative mrateP: lost methane from water to bubbles
-        st%methaneP(i) = st%methaneP(i) + 3600 * mrateP(i)		! %%%%%%%%%%%%%%%%%%%%%%
-        mebu_rate_out = mebu_rate_out + 3600 * mrateP(i)	! total of all the layers
+        st%methaneP(i) = st%methaneP(i) + 3600 * mrateP(i)    ! %%%%%%%%%%%%%%%%%%%%%%
+        mebu_rate_out = mebu_rate_out + 3600 * mrateP(i)      ! total of all the layers
         !mebu_rate_out=pore water CH4 concentration change rate due to interaction with bubbles, unit = mol s-1, size=nz
 
         ! change rate of pore water CH4 due to exchange with bubble
@@ -1297,8 +1291,8 @@ module soil
         ! If bubble in a certain layer grows larger than Vmax then it is transported to the deepest air layer
         ! Currently considers only CH4
         do i = 1,nlayers
-        met_db(i) = 0	!met_db: due to bubble
-        mebu_out = 0	!mebu_out: one dimension
+        met_db(i) = 0   !met_db: due to bubble
+        mebu_out = 0    !mebu_out: one dimension
         mebu_out2(i) = 0;    ! mebu_out2 = ebullition from the layers are temporarily saved here
         Vtmp(i) = st%Vp(i)
         enddo
@@ -1341,7 +1335,7 @@ module soil
         ! bubble did not get stuck => it is released to the lowest air layer
         ! This 'if' loop and the 'do while' loop is either or, Vout will be 0 if the do while loop worked
         if (Vout > 0) then
-        mebu_out2(i) = nout/1	!dt  here I assign 1 hour
+        mebu_out2(i) = nout/1    !dt  here I assign 1 hour
 
         end if
         !     write (*,*) 'Vout > 0  i',i,'Vout',Vout,'mebu_out2(i)',mebu_out2(i)
@@ -1360,7 +1354,7 @@ module soil
         if (mwt .gt. 1) then! if air-peat layer is present
         met_db(mwt-1) = sum(mebu_out2) ! bubbles released to deepest air layer, sum of all the water layers
         ! ebu_out is already 0, no need to set again
-        else			      ! if all layers are flooded, porewater CH4 was already updated
+        else              ! if all layers are flooded, porewater CH4 was already updated
         mebu_out = sum(mebu_out2);
         !        write (*,*) 'mwt mebu_out',mebu_out,mebu_out2
         end if
@@ -1391,9 +1385,9 @@ module soil
 
         ! mebu_out and met_db are larger than 0. the amount of CH4 gets out
         ! amount of CH4 released to the atmosphere  !%%%% I changed gases_out_bigstep into gases_out=Ebu_sum_unsat  sat
-        Ebu_sum_sat = Ebu_sum_sat + (1 * mebu_out)*12		!big_dt replaced with 1hr  %%%% mol/layer to gC/layer %%%%%%%%
+        Ebu_sum_sat = Ebu_sum_sat + (1 * mebu_out)*12       !big_dt replaced with 1hr  %%%% mol/layer to gC/layer %%%%%%%%
         ! amount of CH4 released to the lowest air layer if WTD is below the surface
-        Ebu_sum_unsat = Ebu_sum_unsat + 1 * sum(met_db)*12	!big_dt replaced with 1hr  %%%% mol/layer to gC/layer %%%%%%%%
+        Ebu_sum_unsat = Ebu_sum_unsat + 1 * sum(met_db)*12   !big_dt replaced with 1hr  %%%% mol/layer to gC/layer %%%%%%%%
 
         if (Ebu_sum_sat .ne. 0.) then
         !        write (*,*) 'Ebu_sum_sat', Ebu_sum_sat

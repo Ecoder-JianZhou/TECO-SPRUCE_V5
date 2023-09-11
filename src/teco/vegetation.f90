@@ -42,19 +42,22 @@ module vegetation
          if (ipft .eq. 1) then
             vegn%gpp    = vegn%allSp(ipft)%gpp
             vegn%transp = vegn%allSp(ipft)%transp
-            st%Rsoilab1 = (1/vegn%npft)*Rsoilab1
-            st%Rsoilab2 = (1/vegn%npft)*Rsoilab2
+            vegn%LAI    = (1./vegn%npft)*vegn%allSp(ipft)%LAI
+            st%Esoil    = (1./vegn%npft)*vegn%allSp(ipft)%Esoil
+            st%Rsoilab1 = (1./vegn%npft)*Rsoilab1
+            st%Rsoilab2 = (1./vegn%npft)*Rsoilab2
             ! st%Rsoilab3 = (1/npft)*Rsoilab3
          else
             vegn%gpp    = vegn%gpp    + vegn%allSp(ipft)%gpp
             vegn%transp = vegn%transp + vegn%allSp(ipft)%transp
-            st%Rsoilab1 = st%Rsoilab1 + (1/vegn%npft)*Rsoilab1
-            st%Rsoilab2 = st%Rsoilab2 + (1/vegn%npft)*Rsoilab2
+            vegn%LAI    = vegn%LAI    + (1./vegn%npft)*vegn%allSp(ipft)%LAI
+            st%Esoil    = st%Esoil    + (1./vegn%npft)*vegn%allSp(ipft)%Esoil
+            st%Rsoilab1 = st%Rsoilab1 + (1./vegn%npft)*Rsoilab1
+            st%Rsoilab2 = st%Rsoilab2 + (1./vegn%npft)*Rsoilab2
          endif
       enddo 
-      if (do_soilphy) call Tsoil_simu() ! Jian: need modify
-      vegn%evap   = AMAX1(Esoil *3600.0/(1.0e6*(2.501 - 0.00236*Tair)), 0.)  ! Jian: need modify
-
+      if (do_soilphy) call Tsoil_simu(vegn, iforcing) ! Jian: need modify
+      st%evap   = AMAX1(st%Esoil *3600.0/(1.0e6*(2.501 - 0.00236*iforcing%Tair)), 0.)  ! Jian: need modify
    end subroutine vegn_canopy
 
    ! -------- autotrophic respiration -----------------------------------------------------------------
@@ -247,7 +250,7 @@ module vegetation
          if (iforcing%Tair .LE. Tcold) beta_T = 0.0
       end if
 
-      ! if (spec%tauCLeaf < 8760.) then
+      ! if (spec%tauC(1) < 8760.) then
       !    gamma_W = (1.-W)**bW*gamma_Wmax
       !    gamma_T = (1.-beta_T)**bT*gamma_Tmax
       ! else
@@ -255,7 +258,7 @@ module vegetation
       !    gamma_T = 0.
       ! end if
 
-      gamma_N = 1.0/spec%tauCLeaf*st%scalW      ! Modify by Jiang Jiang 2015/10/20
+      gamma_N = 1.0/spec%tauC(1)*st%scalW      ! Modify by Jiang Jiang 2015/10/20
       if (spec%LAI < spec%LAIMIN) then
          gamma_W = 0.
          gamma_T = 0.
@@ -533,10 +536,10 @@ module vegetation
       ! &     (slope*Y*Rnstar(ileaf)+rhocp*Dair/(rbH_L+raero))/    !2* Weng 0215
       ! &     (slope*Y+psyc*(rswv+rbw+raero)/(rbH_L+raero))
       ! Jian: seem have no effect in this module, Esoil and Hsoil will be calculated in soil module
-      ! Esoil  = (slope*(Rsoilabs - st%G) + rhocp*Dair/(raero + rLAI))/       &
-      !          &      (slope + psyc*(rsoil/(raero + rLAI) + 1.))!*omega!*AMIN1(0.5, AMAX1(0.333, 0.333 + omega))
-      ! ! sensible heat flux into air from soil
-      ! Hsoil = Rsoilabs - Esoil - st%G  ! Jian: it is also calculated in soil module?
+      spec%Esoil  = (slope*(Rsoilabs - st%G) + rhocp*Dair/(raero + rLAI))/       &
+               &      (slope + psyc*(rsoil/(raero + rLAI) + 1.))!*omega!*AMIN1(0.5, AMAX1(0.333, 0.333 + omega))
+      ! sensible heat flux into air from soil
+      spec%Hsoil = Rsoilabs - spe%Esoil - st%G  ! Jian: it is also calculated in soil module?
       return
    end subroutine xlayers
 

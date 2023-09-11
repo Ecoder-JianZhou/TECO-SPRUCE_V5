@@ -19,6 +19,8 @@ module datatypes
     logical :: do_out_day
     logical :: do_out_mon
     logical :: do_out_yr
+    ! 
+    logical :: do_spruce = .False.
 
     integer :: dtimes                 ! 24: hourly simulation
     ! set the input and output path and files
@@ -102,7 +104,10 @@ module datatypes
         real    :: Ndep
     end type forcing_data_type
     type(forcing_data_type), allocatable, save :: forcing(:)
+    integer :: nforcing
     real :: co2ca
+    ! alternative input variable
+    real,DIMENSION(:), ALLOCATABLE :: snow_in       ! if not run snow process, then read from the input file
 
     type site_data_type   ! data use in this model, but the common parameters in this site
         integer:: lat, lon
@@ -112,6 +117,7 @@ module datatypes
         real :: G
         real :: GDD5
         real :: rdepth
+        real :: Q10rh
         real :: Q10pro
         real :: r_me
         real :: Toxi
@@ -122,6 +128,7 @@ module datatypes
         real :: f
         real :: bubprob
         real :: Vmaxfraction  
+        real :: etaW
         ! some environmental variables
         real :: Dair, raero, Tsoill(10), Tsnow, depth_ex, ta, rain_d
         real :: tsoil_layer(11)
@@ -134,19 +141,29 @@ module datatypes
         real :: fwsoil, topfws, omega, scalW
         real :: Rsoilab1, Rsoilab2, Rsoilab3, Rsoilabs
         real :: melt, infilt, runoff
-        real :: evap
+        real :: evap, ET
         real :: diff_snow, condu_snow, shcap_snow, diff_s, condu_b
         real :: water_tw, ice_tw, snow_depth, albedo_snow
         real :: thd_snow_depth, dcount_soil, sftmp
+        ! flux 
+        real :: NPP_L, NPP_W, NPP_R, NEE
         ! energy
         real :: Esoil, Hsoil
+        ! pool revelent
+        real :: CN(8), CN0(8), QC(8), QN(8), tauC(8)
+        real :: f_F2M, f_C2M, f_C2S
+        real :: f_M2S, f_M2P, f_S2P, f_S2M, f_P2M
         ! soil flux
-        real :: Rhetero, Rh_pools(5) 
+        real :: Rhetero, Rh_pools(5), OutC(8), OutN(8)
         ! methane
         real :: simuCH4, Pro_sum, CH4(nlayers), Oxi_sum, CH4_V(nlayers)
         real :: Tpro_me, pwater(nlayers), presP(nlayers), Vp(nlayers) 
         real :: methanebP(nlayers), methaneP(nlayers)
         real :: bubble_methane_tot, Nbub
+        ! N cycle
+        real :: Rnitrogen, N_miner, QNminer, N_transfer, N_uptake, N_fixation
+        real :: alphaN, N_deficit, N_deposit, N_leach, N_vol, N_loss
+        real :: fNnetmin
     end type site_data_type
     type(site_data_type) :: st
 
@@ -179,25 +196,29 @@ module datatypes
         real :: gpp, npp
         real :: transp
         real :: evap
-        real :: RmLeaf, RmStem, RmRoot, Rmain
+        real :: RmLeaf, RmStem, RmRoot, Rmain, Rauto
         real :: Rgrowth
+        real :: NPP_L, NPP_W, NPP_R
         ! states
-        real :: QC1,  QC2,  QC3,  QC4,  QC5             ! leaf, stem, root, Litm, Lits
-        real :: CN01, CN02, CN03, CN04, CN05
+        real :: QC(5), QN(5), CN0(5), CN(5), tauC(5), OutC(8)            ! leaf, stem, root, Litm, Lits
         real :: bmleaf, bmstem, bmroot, bmplant 
-        real :: StemSap,RootSap, NSC, NSCmax, add
+        real :: StemSap, RootSap, NSC, NSCmax, NSCmin, add
+        real :: Stemmax, Rootmax
         real :: storage, stor_use, accumulation, store
         real :: L_fall
         ! special cycle 
-        real :: tauCLeaf, tauCStem, tauCRoot
+        real :: Rh_pools(2)
+        ! real :: f_F2M, f_C2M, f_C2S
         ! N scalar
-        real :: SNvcmax, SNgrowth, SNRauto
-        real :: fnsc, NSN
+        real :: SNvcmax, SNgrowth, SNRauto, JV
+        real :: fnsc, NSN, N_miner, N_transfer, N_uptake, N_fixation
+        real :: OutN(8), alphaN, N_deficit, Rnitrogen
+        real :: N_leaf, N_wood, N_root
         ! 
         integer :: onset
         real :: alpha_L, alpha_W, alpha_R
         ! energy
-        real :: QLleaf
+        real :: QLleaf, Esoil, Hsoil
     end type spec_data_type
 
     type vegn_tile_type
@@ -211,11 +232,12 @@ module datatypes
         real :: transp
         real :: evap
         real :: RmLeaf, RmStem, RmRoot, Rmain
+        real :: Rauto
         ! states
         real :: bmleaf, bmstem, bmroot, bmplant
-        real :: NSC
+        real :: NSC, NSN, storage, stor_use
         ! energy
-        real :: QLleaf, Rsoilab1, Rsoilab2
+        real :: QLleaf, Rsoilab1, Rsoilab2, Esoil, Hsoil
     end type vegn_tile_type
 
     ! some parameters, may be in species, may be in cycle
@@ -334,6 +356,72 @@ module datatypes
         real, allocatable :: snd(:)                     ! m, Total snow depth
         real, allocatable :: lai(:)                     ! m2 m-2, Leaf area index 
     end type outvars_data_type
+    type(outvars_data_type) :: outVars_h, outVars_d, outVars_m, outVars_y
+    type(outvars_data_type) :: tot_outVars_h, tot_outVars_d, tot_outVars_m, tot_outVars_y
+
+    ! parameters from the namelist file
+    type nml_params_data_type
+        real :: lat, lon
+        real :: wsmax, wsmin
+        real :: LAImin, LAImax
+        real :: SLAx, rdepth
+        real :: Rootmax, Stemmax
+        real :: SapR, SapS
+        real :: GLmax, GRmax, Gsmax
+        real :: stom_n, a1, Ds0
+        real :: Vcmax0                              ! Jian: Vcmax0 and Vcmx0 is same? Vcmax0 is Vcmx0 in consts
+        real :: extkU, xfang, alpha               
+        real :: Tau_Leaf, Tau_Wood, Tau_Root        ! turnover rate of plant carbon pools : leaf, wood, root  
+        real :: Tau_F, Tau_C                        ! turnover rate of litter carbon pools: fine, coarse 
+        real :: Tau_Micro, Tau_slowSOM, Tau_Passive ! turnover rate of soil carbon pools  : fast, slow, passive 
+        real :: gddonset
+        real :: Q10, Q10rh                          ! Q10rh modified from Ma et al.,2023 for aclimate study, change in transfer module of Q10h
+        real :: Rl0, Rs0, Rr0
+        ! added for parameters in methane module   
+        real :: r_me, Q10pro
+        real :: kCH4, Omax
+        real :: CH4_thre
+        real :: Tveg, Toxi 
+        real :: Tpro_me
+        ! add based on Ma et al., 2022
+        real :: f, bubprob, Vmaxfraction  
+        ! add based on Ma et al., 2023
+        real :: JV, Entrpy              ! J/mol/K (entropy term, for Jmax & Vcmax)
+        real :: etaL, etaW, etaR        ! etaL and etaR are not used. ! the percentage of fine litter of the litters from plant parts
+        real :: f_F2M, f_C2M, f_C2S
+        real :: f_M2S, f_M2P, f_S2P
+        real :: f_S2M, f_P2M
+    end type nml_params_data_type
+
+    type nml_initValue_data_type
+        ! parameters that are needed to be initilized.
+        real :: QC(8), CN0(8)               ! leaf,wood,root,fine lit.,coarse lit.,Micr,Slow,Pass
+        real :: NSCmin, Storage, nsc
+        real :: accumulation, SNvcmax 
+        real :: N_deposit, alphaN, NSN
+        real :: QNminer, N_deficit
+        real :: thksl(10)                   ! thickness of every soil layer
+        real :: FRLEN(10)                   ! ratio of roots in every layer, Oak Ridge FACE: Shuang
+        real :: liq_water(10)               ! unit m
+        real :: fwsoil, topfws, omega       ! update in soilwater module
+        real :: zwt, infilt
+        real :: sftmp, Tsnow, Twater
+        real :: Tice, G, snow_dsim
+        real :: dcount, dcount_soil
+        real :: ice_tw   
+        real :: Tsoill(10), ice(10)
+        real :: shcap_snow                  ! tuneice worker better
+        real :: condu_snow, condu_b         ! yuanyuan soil thermal version value  ... int: this par is not sensitive to CWE
+        real :: depth_ex, diff_s, diff_snow ! int diffusivity of snow not sensitive for ice
+        real :: albedo_snow, resht     
+        real :: thd_snow_depth, b_bound     ! tuneice  not sensitive for ice
+        real :: infilt_rate, fa, fsub
+        real :: rho_snow, decay_m           ! aging factor on snow melting
+        ! methane module. update: Shuang methane bog species even more shallowly rooted than the tundra. add initials for methane module Shuang version
+        real :: CH4_V(10), CH4(10), Vp(10)  ! assume in the very beginning no bubbles exist in the first three layers (30cm)
+        real :: bubble_methane_tot, Nbub
+        real :: depth_1                     ! calculate soil depth unit cm
+    end type nml_initValue_data_type
 
 contains
     subroutine read_teco_configs()
@@ -351,9 +439,11 @@ contains
         close(388)
     end subroutine read_teco_configs
 
-    subroutine read_parameters_nml(param_nml_file)
+    subroutine read_parameters_nml(param_nml_file, in_params, init_params)
         implicit none
         character(*), intent(in) :: param_nml_file
+        type(nml_params_data_type), intent(inout)    :: in_params
+        type(nml_initValue_data_type), intent(inout) :: init_params
         integer io
         ! ! site special variables that are read from namelist file
         ! type spec_data_type
@@ -383,7 +473,7 @@ contains
         real :: f, bubprob, Vmaxfraction  
         ! add based on Ma et al., 2023
         real :: JV, Entrpy              ! J/mol/K (entropy term, for Jmax & Vcmax)
-        real :: etaL, etaW, etaR        ! etaL and etaR are not used.
+        real :: etaL, etaW, etaR        ! etaL and etaR are not used. ! the percentage of fine litter of the litters from plant parts
         real :: f_F2M, f_C2M, f_C2S
         real :: f_M2S, f_M2P, f_S2P
         real :: f_S2M, f_P2M
@@ -436,6 +526,443 @@ contains
         read(343, nml  = nml_params,         iostat=io)
         read(343, nml  = nml_initial_values, iostat=io)
         close(343)
+        ! update the parameters in in_params and init_params
+        in_params%lat         = lat
+        in_params%lon         = lon
+        in_params%wsmax       = wsmax
+        in_params%wsmin       = wsmin
+        in_params%LAImin      = LAImin
+        in_params%LAImax      = LAImax
+        in_params%SLAx        = SLAx
+        in_params%rdepth      = rdepth
+        in_params%Rootmax     = Rootmax
+        in_params%Stemmax     = Stemmax
+        in_params%SapR        = SapR
+        in_params%SapS        = SapS
+        in_params%GLmax       = GLmax
+        in_params%GRmax       = GRmax
+        in_params%Gsmax       = Gsmax
+        in_params%stom_n      = stom_n
+        in_params%a1          = a1
+        in_params%Ds0         = Ds0
+        in_params%Vcmax0      = Vcmax0
+        in_params%extkU       = extkU
+        in_params%xfang       = xfang
+        in_params%alpha       = alpha            
+        in_params%Tau_Leaf    = Tau_Leaf
+        in_params%Tau_Wood    = Tau_Wood
+        in_params%Tau_Root    = Tau_Root 
+        in_params%Tau_F       = Tau_F
+        in_params%Tau_C       = Tau_C  
+        in_params%Tau_Micro   = Tau_Micro
+        in_params%Tau_slowSOM = Tau_slowSOM
+        in_params%Tau_Passive = Tau_Passive
+        in_params%gddonset    = gddonset
+        in_params%Q10         = Q10
+        in_params%Q10rh       = Q10rh    
+        in_params%Rl0         = Rl0
+        in_params%Rs0         = Rs0
+        in_params%Rr0         = Rr0
+        ! added for parameters in methane module   
+        in_params%r_me        = r_me
+        in_params%Q10pro      = Q10pro
+        in_params%kCH4        = kCH4
+        in_params%Omax        = Omax
+        in_params%CH4_thre    = CH4_thre
+        in_params%Tveg        = Tveg
+        in_params%Toxi        = Toxi
+        in_params%Tpro_me     = Tpro_me
+        ! add based on Ma et al., 2022
+        in_params%f            = f
+        in_params%bubprob      = bubprob
+        in_params%Vmaxfraction = Vmaxfraction
+        ! add based on Ma et al., 2023
+        in_params%JV     = JV
+        in_params%Entrpy = Entrpy 
+        in_params%etaL   = etaL
+        in_params%etaW   = etaW
+        in_params%etaR   = etaR
+        in_params%f_F2M  = f_F2M
+        in_params%f_C2M  = f_C2M
+        in_params%f_C2S  = f_C2S
+        in_params%f_M2S  = f_M2S
+        in_params%f_M2P  = f_M2P
+        in_params%f_S2P  = f_S2P
+        in_params%f_S2M  = f_S2M
+        in_params%f_P2M  = f_P2M
+        ! =====================================
+        init_params%QC             = QC
+        init_params%CN0            = CN0            
+        init_params%NSCmin         = NSCmin
+        init_params%Storage        = Storage
+        init_params%nsc            = nsc
+        init_params%accumulation   = accumulation
+        init_params%SNvcmax        = SNvcmax
+        init_params%N_deposit      = N_deposit
+        init_params%alphaN         = alphaN
+        init_params%NSN            = NSN
+        init_params%QNminer        = QNminer
+        init_params%N_deficit      = N_deficit
+        init_params%thksl          = thksl 
+        init_params%FRLEN          = FRLEN
+        init_params%liq_water      = liq_water
+        init_params%fwsoil         = fwsoil
+        init_params%topfws         = topfws
+        init_params%omega          = omega
+        init_params%zwt            = zwt
+        init_params%infilt         = infilt
+        init_params%sftmp          = sftmp
+        init_params%Tsnow          = Tsnow
+        init_params%Twater         = Twater
+        init_params%Tice           = Tice
+        init_params%G              = G
+        init_params%snow_dsim      = snow_dsim
+        init_params%dcount         = dcount
+        init_params%dcount_soil    = dcount_soil
+        init_params%ice_tw         = ice_tw
+        init_params%Tsoill         = Tsoill
+        init_params%ice            = ice
+        init_params%shcap_snow     = shcap_snow
+        init_params%condu_snow     = condu_snow
+        init_params%condu_b        = condu_b
+        init_params%depth_ex       = depth_ex
+        init_params%diff_s         = diff_s
+        init_params%diff_snow      = diff_snow
+        init_params%albedo_snow    = albedo_snow
+        init_params%resht          = resht
+        init_params%thd_snow_depth = thd_snow_depth
+        init_params%b_bound        = b_bound
+        init_params%infilt_rate    = infilt_rate
+        init_params%fa             = fa
+        init_params%fsub           = fsub
+        init_params%rho_snow       = rho_snow
+        init_params%decay_m        = decay_m
+        ! methane module. update: Shuang methane bog species even more shallowly rooted than the tundra. add initials for methane module Shuang version
+        init_params%CH4_V              = CH4_V
+        init_params%CH4                = CH4
+        init_params%Vp                 = Vp
+        init_params%bubble_methane_tot = bubble_methane_tot
+        init_params%Nbub               = Nbub
+        init_params%depth_1            = depth_1
     end subroutine read_parameters_nml
 
+    subroutine get_forcingdata()
+        implicit none
+        integer STAT, COUNT
+        character(50) commts
+        ! define variable for each line
+        integer :: tmp_yr, tmp_doy, tmp_h
+        real    :: tmp_Ta, tmp_Ts,  tmp_rh, tmp_vpd, tmp_rain, tmp_ws 
+        real    :: tmp_par, tmp_co2, tmp_pbot, tmp_ndep
+
+        call ReadLineNumFromFile(climfile, nforcing)  ! get the line number
+
+        allocate(forcing(nforcing))                   ! allocate the array
+
+        COUNT = 0
+        OPEN(1,FILE=climfile,status='old',ACTION='read',IOSTAT=STAT)
+        read(1,'(a160)') commts
+        DO WHILE (.TRUE.)
+            COUNT=COUNT+1
+            READ(1,*,IOSTAT=STAT, end=993) tmp_yr, tmp_doy, tmp_h,   &
+                tmp_Ta,  tmp_Ts,  tmp_rh, tmp_vpd, tmp_rain, tmp_ws, & 
+                tmp_par, tmp_co2, tmp_pbot, tmp_ndep
+            IF(STAT .NE. 0) EXIT
+            forcing(COUNT)%year  = tmp_yr
+            forcing(COUNT)%doy   = tmp_doy
+            forcing(COUNT)%hour  = tmp_h
+            forcing(COUNT)%Tair  = tmp_Ta
+            forcing(COUNT)%Tsoil = tmp_Ts
+            forcing(COUNT)%RH    = tmp_rh
+            forcing(COUNT)%VPD   = tmp_vpd
+            forcing(COUNT)%Rain  = tmp_rain
+            forcing(COUNT)%WS    = tmp_ws
+            forcing(COUNT)%PAR   = tmp_par
+            forcing(COUNT)%CO2   = tmp_co2
+            forcing(COUNT)%PBOT  = tmp_pbot
+            forcing(COUNT)%Ndep  = tmp_ndep
+        ENDDO
+993     continue
+        CLOSE(1)
+    end subroutine get_forcingdata
+
+    subroutine get_snowdepth()
+        implicit none
+        ! real temp_snow_depth(max_nlines)
+        integer STAT, COUNT, nrow
+        character(50) commts
+
+        ! integer m,n,istat1,lines,yr_length
+        real snow_depth_read
+        integer tmp_yr, tmp_doy, tmp_hr
+
+        call ReadLineNumFromFile(snowdepthfile, nrow)  ! get the line number
+        allocate(snow_in(nrow))
+
+        open(11,file = snowdepthfile, status ='old',ACTION='read', IOSTAT=STAT)
+        read(11,'(a160)') commts ! skip 2 lines of input met data file
+        COUNT = 0
+        do
+            COUNT = COUNT + 1
+            read (11,*,IOSTAT=STAT, end=1018) tmp_yr,tmp_doy,tmp_hr,snow_depth_read
+            IF(STAT .NE. 0) EXIT
+            snow_in(COUNT)=snow_depth_read     
+        enddo
+1018    continue
+        close(11)    ! close snow depth file
+        return
+    end subroutine get_snowdepth
+
+    subroutine ReadLineNumFromFile(filepath, count_lines)
+        implicit none
+        character(len=*), intent(in) :: filepath
+        character(len=100) header, line
+        integer STAT, count_lines
+
+        open(38, file=trim(filepath), status="old", action="read", iostat=STAT) ! open file
+        read(38, '(a100)') header           ! read the header of the file
+        count_lines = 0                     ! initilize the count_lines
+        do while(.TRUE.)
+            read(38, *, iostat=STAT) line   ! read each line
+            if(STAT .ne. 0) exit            ! until the end of the file
+            count_lines = count_lines + 1   ! recording the count of the lines
+        enddo
+        return
+    end subroutine ReadLineNumFromFile
+
+    subroutine assign_outVars(ntime, outVars)
+        implicit none
+        integer ntime
+        type(outvars_data_type), intent(inout) :: outVars
+        ! assign the outVars 
+        allocate(outVars%gpp(ntime))
+        allocate(outVars%nee(ntime))
+        allocate(outVars%npp(ntime))
+        allocate(outVars%nppLeaf(ntime))
+        allocate(outVars%nppWood(ntime))
+        allocate(outVars%nppStem(ntime))
+        allocate(outVars%nppRoot(ntime))
+        allocate(outVars%nppOther(ntime)) 
+        allocate(outVars%ra(ntime))
+        allocate(outVars%raLeaf(ntime))
+        allocate(outVars%raStem(ntime))
+        allocate(outVars%raRoot(ntime))
+        allocate(outVars%raOther(ntime))
+        allocate(outVars%rMaint(ntime))
+        allocate(outVars%rGrowth(ntime))
+        allocate(outVars%rh(ntime))
+        allocate(outVars%nbp(ntime))
+        allocate(outVars%wetlandCH4(ntime))
+        allocate(outVars%wetlandCH4prod(ntime))
+        allocate(outVars%wetlandCH4cons(ntime))
+        ! Carbon Pools  (KgC m-2)
+        allocate(outVars%cLeaf(ntime))
+        allocate(outVars%cStem(ntime))
+        allocate(outVars%cRoot(ntime))
+        allocate(outVars%cOther(ntime)) 
+        allocate(outVars%cLitter(ntime))
+        allocate(outVars%cLitterCwd(ntime))
+        allocate(outVars%cSoil(ntime))
+        allocate(outVars%cSoilLevels(ntime, nlayers))
+        allocate(outVars%cSoilFast(ntime))
+        allocate(outVars%cSoilSlow(ntime))
+        allocate(outVars%cSoilPassive(ntime))
+        allocate(outVars%CH4(ntime, nlayers))
+        ! Nitrogen fluxes (kgN m-2 s-1)
+        allocate(outVars%fBNF(ntime))
+        allocate(outVars%fN2O(ntime))
+        allocate(outVars%fNloss(ntime))
+        allocate(outVars%fNnetmin(ntime))
+        allocate(outVars%fNdep(ntime))
+        ! Nitrogen pools (kgN m-2)
+        allocate(outVars%nLeaf(ntime))
+        allocate(outVars%nStem(ntime))
+        allocate(outVars%nRoot(ntime))
+        allocate(outVars%nOther(ntime))
+        allocate(outVars%nLitter(ntime))
+        allocate(outVars%nLitterCwd(ntime))
+        allocate(outVars%nSoil(ntime))
+        allocate(outVars%nMineral(ntime))
+        ! energy fluxes (W m-2)
+        allocate(outVars%hfls(ntime))
+        allocate(outVars%hfss(ntime))
+        allocate(outVars%SWnet(ntime))
+        allocate(outVars%LWnet(ntime)) 
+        ! water fluxes (kg m-2 s-1)
+        allocate(outVars%ec(ntime))
+        allocate(outVars%tran(ntime))
+        allocate(outVars%es(ntime))
+        allocate(outVars%hfsbl(ntime)) 
+        allocate(outVars%mrro(ntime))
+        allocate(outVars%mrros(ntime))
+        allocate(outVars%mrrob(ntime))
+        ! other
+        allocate(outVars%mrso(ntime, nlayers))
+        allocate(outVars%tsl(ntime, nlayers))
+        allocate(outVars%tsland(ntime))
+        allocate(outVars%wtd(ntime))
+        allocate(outVars%snd(ntime))
+        allocate(outVars%lai(ntime))
+    end subroutine assign_outVars
+
+    subroutine init_update_year(vegn)
+        implicit none
+        type(vegn_tile_type), intent(inout) :: vegn
+        integer ipft
+        st%GDD5 = 0.
+        do ipft = 1, vegn%npft
+            vegn%allSp(ipft)%onset = 0
+        enddo 
+        call init_outVars(outVars_y)
+    end subroutine init_update_year
+
+    subroutine init_outVars(outVars)
+        implicit none
+        type(outvars_data_type), intent(inout) :: outVars
+        outVars%gpp              = 0.
+        outVars%nee              = 0.
+        outVars%npp              = 0.
+        outVars%nppLeaf          = 0.
+        outVars%nppWood          = 0.
+        outVars%nppStem          = 0.
+        outVars%nppRoot          = 0.
+        outVars%nppOther         = 0.  
+        outVars%ra               = 0.
+        outVars%raLeaf           = 0.
+        outVars%raStem           = 0.
+        outVars%raRoot           = 0.
+        outVars%raOther          = 0.
+        outVars%rMaint           = 0.
+        outVars%rGrowth          = 0.
+        outVars%rh               = 0.
+        outVars%nbp              = 0.
+        outVars%wetlandCH4       = 0.
+        outVars%wetlandCH4prod   = 0.
+        outVars%wetlandCH4cons   = 0. 
+        ! Carbon Pools  (KgC m-2)
+        outVars%cLeaf            = 0.
+        outVars%cStem            = 0.
+        outVars%cRoot            = 0.
+        outVars%cOther           = 0.
+        outVars%cLitter          = 0.
+        outVars%cLitterCwd       = 0.  
+        outVars%cSoil            = 0.
+        outVars%cSoilLevels      = 0.
+        outVars%cSoilFast        = 0.
+        outVars%cSoilSlow        = 0.
+        outVars%cSoilPassive     = 0. 
+        outVars%CH4              = 0.
+        ! Nitrogen fluxes (kgN m-2 s-1)
+        outVars%fBNF             = 0.
+        outVars%fN2O             = 0.
+        outVars%fNloss           = 0.
+        outVars%fNnetmin         = 0.
+        outVars%fNdep            = 0.  
+        ! Nitrogen pools (kgN m-2)
+        outVars%nLeaf            = 0.
+        outVars%nStem            = 0.
+        outVars%nRoot            = 0.
+        outVars%nOther           = 0.
+        outVars%nLitter          = 0.
+        outVars%nLitterCwd       = 0.
+        outVars%nSoil            = 0.
+        outVars%nMineral         = 0. 
+        ! energy fluxes (W m-2)
+        outVars%hfls             = 0.
+        outVars%hfss             = 0.
+        outVars%SWnet            = 0.
+        outVars%LWnet            = 0.
+        ! water fluxes (kg m-2 s-1)
+        outVars%ec               = 0.
+        outVars%tran             = 0.
+        outVars%es               = 0.   
+        outVars%hfsbl            = 0.  
+        outVars%mrro             = 0.
+        outVars%mrros            = 0.
+        outVars%mrrob            = 0.   
+        ! other
+        outVars%mrso             = 0.  
+        outVars%tsl              = 0.
+        outVars%tsland           = 0.                 
+        outVars%wtd              = 0.           
+        outVars%snd              = 0.           
+        outVars%lai              = 0.
+    end subroutine init_outVars
+
+    subroutine deallocate_results(outVars)
+        type(outvars_data_type), intent(inout) :: outVars
+        if (allocated(outVars%gpp))            deallocate(outVars%gpp)
+        if (allocated(outVars%nee))            deallocate(outVars%nee)
+        if (allocated(outVars%npp))            deallocate(outVars%npp)
+        if (allocated(outVars%nppLeaf))        deallocate(outVars%nppLeaf)
+        if (allocated(outVars%nppWood))        deallocate(outVars%nppWood)
+        if (allocated(outVars%nppStem))        deallocate(outVars%nppStem)
+        if (allocated(outVars%nppRoot))        deallocate(outVars%nppRoot)
+        if (allocated(outVars%nppOther))       deallocate(outVars%nppOther)           
+        if (allocated(outVars%ra))             deallocate(outVars%ra)
+        if (allocated(outVars%raLeaf))         deallocate(outVars%raLeaf)
+        if (allocated(outVars%raStem))         deallocate(outVars%raStem)
+        if (allocated(outVars%raRoot))         deallocate(outVars%raRoot)
+        if (allocated(outVars%raOther))        deallocate(outVars%raOther)
+        if (allocated(outVars%rMaint))         deallocate(outVars%rMaint)
+        if (allocated(outVars%rGrowth))        deallocate(outVars%rGrowth)           
+        if (allocated(outVars%rh))             deallocate(outVars%rh)
+        if (allocated(outVars%nbp))            deallocate(outVars%nbp)                
+        if (allocated(outVars%wetlandCH4))     deallocate(outVars%wetlandCH4)
+        if (allocated(outVars%wetlandCH4prod)) deallocate(outVars%wetlandCH4prod)
+        if (allocated(outVars%wetlandCH4cons)) deallocate(outVars%wetlandCH4cons)  
+        ! Carbon Pools  (KgC m-2)
+        if (allocated(outVars%cLeaf))        deallocate(outVars%cLeaf)
+        if (allocated(outVars%cStem))        deallocate(outVars%cStem)
+        if (allocated(outVars%cRoot))        deallocate(outVars%cRoot)
+        if (allocated(outVars%cOther))       deallocate(outVars%cOther)
+        if (allocated(outVars%cLitter))      deallocate(outVars%cLitter)
+        if (allocated(outVars%cLitterCwd))   deallocate(outVars%cLitterCwd)
+        if (allocated(outVars%cSoil))        deallocate(outVars%cSoil)
+        if (allocated(outVars%cSoilLevels))  deallocate(outVars%cSoilLevels)
+        if (allocated(outVars%cSoilFast))    deallocate(outVars%cSoilFast)
+        if (allocated(outVars%cSoilSlow))    deallocate(outVars%cSoilSlow)
+        if (allocated(outVars%cSoilPassive)) deallocate(outVars%cSoilPassive)
+        if (allocated(outVars%CH4))          deallocate(outVars%CH4)
+        ! Nitrogen fluxes (kgN m-2 s-1)
+        if (allocated(outVars%fBNF))         deallocate(outVars%fBNF)
+        if (allocated(outVars%fN2O))         deallocate(outVars%fN2O)
+        if (allocated(outVars%fNloss))       deallocate(outVars%fNloss)
+        if (allocated(outVars%fNnetmin))     deallocate(outVars%fNnetmin)
+        if (allocated(outVars%fNdep))        deallocate(outVars%fNdep)
+        ! Nitrogen pools (kgN m-2)
+        if (allocated(outVars%nLeaf))        deallocate(outVars%nLeaf)
+        if (allocated(outVars%nStem))        deallocate(outVars%nStem)
+        if (allocated(outVars%nRoot))        deallocate(outVars%nRoot)
+        if (allocated(outVars%nOther))       deallocate(outVars%nOther)
+        if (allocated(outVars%nLitter))      deallocate(outVars%nLitter)
+        if (allocated(outVars%nLitterCwd))   deallocate(outVars%nLitterCwd)
+        if (allocated(outVars%nSoil))        deallocate(outVars%nSoil)
+        if (allocated(outVars%nMineral))     deallocate(outVars%nMineral)
+        ! energy fluxes (W m-2)
+        if (allocated(outVars%hfls))         deallocate(outVars%hfls)
+        if (allocated(outVars%hfss))         deallocate(outVars%hfss)
+        if (allocated(outVars%SWnet))        deallocate(outVars%SWnet)
+        if (allocated(outVars%LWnet))        deallocate(outVars%LWnet)
+        ! water fluxes (kg m-2 s-1)
+        if (allocated(outVars%ec))           deallocate(outVars%ec)
+        if (allocated(outVars%tran))         deallocate(outVars%tran)
+        if (allocated(outVars%es))           deallocate(outVars%es)
+        if (allocated(outVars%hfsbl))        deallocate(outVars%hfsbl)
+        if (allocated(outVars%mrro))         deallocate(outVars%mrro)
+        if (allocated(outVars%mrros))        deallocate(outVars%mrros)
+        if (allocated(outVars%mrrob))        deallocate(outVars%mrrob)
+        ! other
+        if (allocated(outVars%mrso))         deallocate(outVars%mrso)      
+        if (allocated(outVars%tsl))          deallocate(outVars%tsl)       
+        if (allocated(outVars%tsland))       deallocate(outVars%tsland) 
+        if (allocated(outVars%wtd))          deallocate(outVars%wtd)
+        if (allocated(outVars%snd))          deallocate(outVars%snd)
+        if (allocated(outVars%lai))          deallocate(outVars%lai)
+    end subroutine deallocate_results
+
+    subroutine deallocate_date_type()
+        if (allocated(forcing)) deallocate(forcing)
+        if (allocated(snow_in)) deallocate(snow_in)
+    end subroutine deallocate_date_type
 end module datatypes
