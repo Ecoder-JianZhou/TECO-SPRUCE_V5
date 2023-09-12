@@ -275,7 +275,7 @@ module transfer
         st%QNminer  = st%QNminer - st%N_loss
         st%fNnetmin = st%N_miner + st%N_deposit - (st%N_uptake+N_immob)-st%N_loss
         ! update plant carbon pools, ! daily change of each pool size
-        call matrix_struct()
+        ! call matrix_struct()
         do ipft = 1, vegn%npft
             vegn%allSp(ipft)%QC(1) = vegn%allSp(ipft)%QC(1) - vegn%allSp(ipft)%OutC(1) + vegn%allSp(ipft)%NPP_L
             vegn%allSp(ipft)%QC(2) = vegn%allSp(ipft)%QC(2) - vegn%allSp(ipft)%OutC(2) + vegn%allSp(ipft)%NPP_W

@@ -26,6 +26,7 @@ module datatypes
     ! set the input and output path and files
     character(200) :: inDir
     character(200) :: outDir
+
     ! input files
     character(300) :: climfile
     character(300) :: watertablefile
@@ -40,8 +41,13 @@ module datatypes
     character(250) :: outDir_mcmc   = "results_mcmc"
     character(250) :: outDir_spinup = "results_spinup"
 
+    ! other paths
+    character(300) :: outdir_case, outDir_h, outDir_d, outDir_m, outDir_y
+    character(300) :: outDir_mcmc_h, outDir_mcmc_d, outDir_mcmc_m, outfile_restart, restartfile
+
     integer :: count_pft
-    character(300), allocatable :: files_pft_params(:)
+    character(300) :: file_site_params
+    character(300), allocatable :: spec_names(:), files_pft_params(:)
 
     ! experiment settings
     real :: Ttreat   = 0.        ! Temperature treatment, warming in air and soil temperature
@@ -440,9 +446,9 @@ contains
             do_restart, do_snow, do_soilphy, do_EBG, do_ndep, do_leap, do_out_hr,       &
             do_out_day, do_out_mon, do_out_yr, dtimes, inDir, outDir, climfile,         &
             watertablefile, snowdepthfile, in_restartfile, mcmc_configfile,             &
-            spinup_configfile, count_pft, files_pft_params
+            spinup_configfile, file_site_params, count_pft, spec_names, files_pft_params
         namelist /nml_exps/ Ttreat, CO2treat, N_fert
-        print *, "# read TECO config nml file ..."
+        print *, "# read TECO config nml file ...", teco_configfile
         open(388, file = teco_configfile)
         read(388, nml  = nml_teco_settings,  iostat=io)
         read(388, nml  = nml_exps,           iostat=io)
@@ -656,7 +662,20 @@ contains
         init_params%depth_1            = depth_1
     end subroutine read_parameters_nml
 
-    subroutine initilize(in_params, init_params)
+    subroutine initilize(site_params, vegn_params, vegn)
+        implicit none
+        character(*), intent(in) :: site_params, vegn_params(:)
+        type(nml_params_data_type)    :: in_params
+        type(nml_initValue_data_type) :: init_params
+        type(vegn_tile_type), intent(inout) :: vegn
+        call read_parameters_nml(adjustl(trim("configs/"//adjustl(trim(site_params)))), &
+                in_params, init_params)
+        call initilize_site(in_params, init_params)
+        call initilize_vegn(vegn, vegn_params)
+        return
+    end subroutine initilize
+
+    subroutine initilize_site(in_params, init_params)
         implicit none
         type(nml_params_data_type), intent(inout)    :: in_params
         type(nml_initValue_data_type), intent(inout) :: init_params
@@ -746,9 +765,37 @@ contains
         do i = 1, 10
             st%wcl(i)   = st%wsmax/100.
         enddo
-    end subroutine initilize
+    end subroutine initilize_site
 
-    subroutine initilize_vegn(spec, in_params, init_params)
+    subroutine initilize_vegn(vegn, files_vegn_params)
+        implicit none
+        type(vegn_tile_type), intent(inout) :: vegn
+        character(*), intent(in) :: files_vegn_params(:)
+        type(nml_params_data_type)    :: in_params
+        type(nml_initValue_data_type) :: init_params
+        integer :: ipft, npft
+
+        npft = size(files_vegn_params)
+        allocate(vegn%allSp(npft))
+        vegn%npft = npft
+        if(allocated(vegn%allSp)) then
+            do ipft = 1, npft
+                call read_parameters_nml(adjustl(trim("configs/"//adjustl(trim(files_vegn_params(ipft))))), &
+                        in_params, init_params)
+                call initilize_spec(vegn%allSp(ipft), in_params, init_params)
+                if (ipft .eq. 1) then
+                    vegn%LAImax = vegn%allSp(ipft)%LAImax
+                    vegn%LAImin = vegn%allSp(ipft)%LAImin
+                else
+                    vegn%LAImax = AMAX1(vegn%LAImax, vegn%allSp(ipft)%LAImax)
+                    vegn%LAImin = AMAX1(vegn%LAImin, vegn%allSp(ipft)%LAImin)
+                endif
+            enddo
+        endif
+        
+    end subroutine initilize_vegn
+
+    subroutine initilize_spec(spec, in_params, init_params)
         implicit none
         type(spec_data_type), intent(inout)          :: spec
         type(nml_params_data_type), intent(inout)    :: in_params
@@ -783,7 +830,7 @@ contains
         spec%accumulation = init_params%accumulation
         spec%SNvcmax = init_params%SNvcmax
         spec%NSN     = init_params%NSN
-    end subroutine initilize_vegn
+    end subroutine initilize_spec
 
     subroutine get_forcingdata()
         implicit none
@@ -977,11 +1024,32 @@ contains
         allocate(outVars%lai(ntime))
     end subroutine assign_outVars
 
-    subroutine init_day()
+    subroutine init_hourly()
         implicit none
+        ! type(vegn_tile_type), intent(inout) :: vegn
+        ! integer ipft
+        ! do ipft = 1, vegn%npft
+        !     vegn%allSp(ipft)%onset = 0
+        ! enddo 
+        call init_outVars(outVars_h)
+    end subroutine init_hourly
 
-    end subroutine init_day
-    subroutine init_update_year(vegn)
+    subroutine init_daily()
+        implicit none
+        ! type(vegn_tile_type), intent(inout) :: vegn
+        ! integer ipft
+        ! do ipft = 1, vegn%npft
+        !     vegn%allSp(ipft)%onset = 0
+        ! enddo 
+        call init_outVars(outVars_d)
+    end subroutine init_daily
+
+    subroutine init_monthly()
+        implicit none
+        call init_outVars(outVars_h)
+    end subroutine init_monthly
+
+    subroutine init_yearly(vegn)
         implicit none
         type(vegn_tile_type), intent(inout) :: vegn
         integer ipft
@@ -990,7 +1058,7 @@ contains
             vegn%allSp(ipft)%onset = 0
         enddo 
         call init_outVars(outVars_y)
-    end subroutine init_update_year
+    end subroutine init_yearly
 
     subroutine init_outVars(outVars)
         implicit none

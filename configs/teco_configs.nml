@@ -29,7 +29,9 @@
     mcmc_configfile   = "mcmc_configs.nml"
     spinup_configfile = "spinup_configs.nml"
 
+    file_site_params  = "parameters.nml"
     count_pft         = 3
+    spec_names        = "Tree", "Shrub", "Sphag"
     files_pft_params  = "parameters.nml", "parameters.nml", "parameters.nml"
 /
 

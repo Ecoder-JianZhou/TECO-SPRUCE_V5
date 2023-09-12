@@ -1,12 +1,12 @@
 program TECO
     use datatypes
     use driver
+    use io_mod
     
     implicit none
-    integer :: count_mode
+    integer :: count_mode, nHours, nDays, nMonths, nYears 
     integer num_args, ierr
-    type(nml_params_data_type)    :: in_params
-    type(nml_initValue_data_type) :: init_params
+    type(vegn_tile_type)          :: vegn
 
     print *, ""
     write(*,*) "# -----------------------------------------"
@@ -14,13 +14,13 @@ program TECO
     num_args = COMMAND_ARGUMENT_COUNT()
     ! check if have the file
     if (num_args /= 1) then
-        write(*,*) "Usage: ./my_program <config_file>"
+        write(*,*) "Usage: ./my_program <teco_configfile>"
         stop
     end if
     ! read the command
-    call GET_COMMAND_ARGUMENT(1, config_file, ierr)
-    config_file = adjustl(trim("configs/"))//adjustl(trim(config_file))
-    write(*,*) "Reading the file of ", config_file
+    call GET_COMMAND_ARGUMENT(1, teco_configfile, ierr)
+    teco_configfile = adjustl(trim("configs/"))//adjustl(trim(teco_configfile))
+    write(*,*) "Reading the file of ", teco_configfile
 
     print *, ""
     write(*,*) "# -----------------------------------------"
@@ -47,7 +47,7 @@ program TECO
         continue
     endif
 
-    write(*,*) "# Start to run the case of """, adjustl(trim(simu_name)), """"
+    write(*,*) "# Start to run the case of """, adjustl(trim(case_name)), """"
     ! update the in-out path and create the revelent ouput paths
     call createNewCase() 
 
@@ -56,18 +56,43 @@ program TECO
     nDays   = int(nHours/24.)
     nYears  = int(nforcing/(365*24))
     nMonths = nYears*12
-    do ipft = 1, count_pft
-        call read_parameters_nml(files_pft_params(ipft), in_params, init_params)
-    enddo
 
+    call initilize(file_site_params, files_pft_params, vegn)
+    count_pft = vegn%npft
     if(do_out_hr)  call assign_outVars(nHours,  outVars_h, count_pft)
     if(do_out_day) call assign_outVars(nDays,   outVars_d, count_pft)
     if(do_out_mon) call assign_outVars(nMonths, outVars_m, count_pft)
     if(do_out_yr)  call assign_outVars(nYears,  outVars_y, count_pft)
 
     if (.not. do_snow) call get_snowdepth()
+    if (do_restart)then
+        ! call read_restart(restartfile)     ! this module in "writeOutput2nc.f90"
+        ! call initialize_with_restart()
+    endif
+
+    if(do_simu)then
+        print *, "# Start to run simulation mode."
+        call teco_simu(vegn)            ! run simulation
+        if(do_out_hr)  call write_outputs_nc(outDir_h, outVars_h, nHours, "hourly") 
+        if(do_out_day) call write_outputs_nc(outDir_d, outVars_d, nDays,  "daily") 
+        if(do_out_mon) call write_outputs_nc(outDir_m, outVars_m, nMonths,"monthly") 
+    elseif(do_spinup)then
+        ! call init_spinup_variables()    ! initilize the spin-up variables
+        ! call run_spinup()               ! run spin-up loops
+        ! call write_spinup_res()         ! write the results of SPIN-UP
+        ! call write_restart()            ! write the result file
+        ! call deallo_spinup_variables()  ! deallocate the variables of SPIN-UP
+    elseif(do_mcmc) then
+        ! call init_mcmc()                ! initilize the MCMC 
+        ! call run_mcmc()                 ! run MCMC
+        ! call deallocate_mcmc()          ! deallocate the MCMC variables 
+    endif
     
-! update the vegn LAImax LAImin
+    if(do_out_hr)  call deallocate_results(outVars_h)
+    if(do_out_day) call deallocate_results(outVars_d)
+    if(do_out_mon) call deallocate_results(outVars_m)
+    if(do_out_yr)  call deallocate_results(outVars_y)
+    call deallocate_date_type()
 end program TECO
 
 
@@ -82,10 +107,10 @@ subroutine createNewCase()
     print *, "# Update and create the output dirs"
 
     ! update the full path of input file
-    climfile        = adjustl(trim(filepath_in))//"/"//adjustl(trim(climfile))       ! climate file name
-    snowdepthfile   = adjustl(trim(filepath_in))//"/"//adjustl(trim(snowdepthfile))  ! snow depthfile
-    restartfile     = adjustl(trim(filepath_in))//"/"//adjustl(trim(restartfile))    ! restartfile
-    watertablefile  = adjustl(trim(filepath_in))//"/"//adjustl(trim(watertablefile)) ! Jian: maybe used when not run soil_physical
+    climfile        = adjustl(trim(inDir))//"/"//adjustl(trim(climfile))       ! climate file name
+    snowdepthfile   = adjustl(trim(inDir))//"/"//adjustl(trim(snowdepthfile))  ! snow depthfile
+    restartfile     = adjustl(trim(inDir))//"/"//adjustl(trim(restartfile))    ! restartfile
+    watertablefile  = adjustl(trim(inDir))//"/"//adjustl(trim(watertablefile)) ! Jian: maybe used when not run soil_physical
     ! check the inputfile
     call check_inputfile(climfile, "climate file")
     if (.not. do_snow)    call check_inputfile(snowdepthfile,  "The file of snowdepth")
@@ -95,7 +120,7 @@ subroutine createNewCase()
     call CreateFolder(adjustl(trim(outdir)))
 
     ! update and create the output dir of case
-    outdir_case = adjustl(trim(outdir))//"/"//adjustl(trim(simu_name))
+    outdir_case = adjustl(trim(outdir))//"/"//adjustl(trim(case_name))
     call CreateFolder(adjustl(trim(outdir_case)))
 
     ! update and create the output dir of each format outputs
@@ -139,6 +164,37 @@ subroutine createNewCase()
     endif
 
     if(do_restart)then
-        restartfile = adjustl(trim(filepath_in))//adjustl(trim(restartfile))
+        restartfile = adjustl(trim(inDir))//adjustl(trim(restartfile))
     endif
 end subroutine createNewCase
+
+subroutine CreateFolder(path_new)
+    implicit none
+    character(len=*), INTENT(in) :: path_new
+    character (len=:), allocatable :: cmdChar
+    logical :: dirExists
+    ! ----------------------------------------------------
+    allocate(character(len=6+len(path_new)) :: cmdChar)
+    cmdChar = "mkdir "//path_new
+    inquire( file=trim(path_new)//'/.', exist=dirExists )  ! Works with gfortran, but not ifort
+    ! inquire( directory=newDirPath, exist=dirExists )         ! Works with ifort, but not gfortran
+    if (.not. dirExists) call system(cmdChar)
+    deallocate(cmdChar)
+end subroutine CreateFolder
+
+subroutine check_inputfile(filepath, whatfile)
+    implicit none
+    character(*), intent(in) :: filepath, whatfile
+    logical :: file_exists
+
+    inquire(file=filepath, exist=file_exists)
+    
+    if (file_exists) then
+        print *, "# ", whatfile," exists: "
+        print *, "#     ", filepath
+    else
+        print *, "# ", whatfile," does not exist: "
+        print *, "#     ", filepath
+        stop
+    end if
+end subroutine check_inputfile

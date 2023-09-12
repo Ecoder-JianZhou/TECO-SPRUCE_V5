@@ -165,7 +165,7 @@ module vegetation
 
       bmP  = bmL + bmR + bmS                                        ! Plant C biomass
       acP  = bmL + spec%StemSap + bmS                               ! Plant available sapwood C
-      CNp0 = bmP/(bmL/spec%CN01 + bmR/spec%CN03 + bmS/spec%CN02)            ! Plant CN ratio
+      CNp0 = bmP/(bmL/spec%CN0(1) + bmR/spec%CN0(3) + bmS/spec%CN0(2))            ! Plant CN ratio
 
       ! hmax = 24.19   ! m
       ! hl0  = 0.00019  ! m2/kg C
@@ -539,7 +539,7 @@ module vegetation
       spec%Esoil  = (slope*(Rsoilabs - st%G) + rhocp*Dair/(raero + rLAI))/       &
                &      (slope + psyc*(rsoil/(raero + rLAI) + 1.))!*omega!*AMIN1(0.5, AMAX1(0.333, 0.333 + omega))
       ! sensible heat flux into air from soil
-      spec%Hsoil = Rsoilabs - spe%Esoil - st%G  ! Jian: it is also calculated in soil module?
+      spec%Hsoil = Rsoilabs - spec%Esoil - st%G  ! Jian: it is also calculated in soil module?
       return
    end subroutine xlayers
 
@@ -990,12 +990,12 @@ module vegetation
       return
    end function sinbet
 
-   real function esat(T)
-      real T
-      ! returns saturation vapour pressure in Pa
-      esat = 610.78*exp(17.27*T/(T + 237.3))
-      return
-   end
+   ! real function esat(T)
+   !    real T
+   !    ! returns saturation vapour pressure in Pa
+   !    esat = 610.78*exp(17.27*T/(T + 237.3))
+   !    return
+   ! end
 
    ! ****************************************************************************
    ! Reed et al (1976, J appl Ecol 13:925) equation for temperature response
@@ -1012,7 +1012,7 @@ module vegetation
    end
    !****************************************************************************
    real function Vjmax(Tk,Trefk,Vjmax0,Eactiv,Edeact,Rconst,Entrop)
-      real :: Tk,Trefk,Vjmax0,Eactiv,Edeact,Rconst,Entrop
+      real :: Tk,Trefk,Vjmax0,Eactiv,Edeact,Rconst,Entrop, aden, anum
       anum = Vjmax0*EXP((Eactiv/(Rconst*Trefk))*(1.-Trefk/Tk))
       aden = 1. + EXP((Entrop*Tk-Edeact)/(Rconst*Tk))
       Vjmax = anum/aden

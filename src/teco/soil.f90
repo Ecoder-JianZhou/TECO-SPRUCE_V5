@@ -412,7 +412,8 @@ module soil
                     drsdh    = 0.0    ! temporarily set drsdh =0 for heat adjustment of soil when  
                     tsoill_0 = (st%Tsoill(1)+st%Tsnow)/2.
                 elseif (water_table_depth .gt. 0.) then  
-                    temph_water = (3600.*condu_water/shcap_water*10000.+difsv1)*(st%Twater-st%Tsoill(1))/((water_table_depth+st%thksl(1))/2.)! there is snow layer 
+                    temph_water = (3600.*condu_water/shcap_water*10000.+difsv1)*(st%Twater-st%Tsoill(1))/&
+                                  ((water_table_depth+st%thksl(1))/2.)! there is snow layer 
                     st%Twater   = st%Twater+(2.*3600.*condu_water/shcap_water*10000.*(st%sftmp-st%Twater)/(water_table_depth/2.) &
                                 &        -temph_water)/(water_table_depth/2.+(water_table_depth+st%thksl(1))/2.) 
                     !!!!!!!!!!!!!!!!!!  Phase change surface water !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -788,7 +789,7 @@ module soil
             fwater(i) = st%wsc(i)/(st%thksl(i)*10)      
             fair(i) = phi-fwater(i)
                         
-            D_CH4_soil_a(i) = (((fair(i))**(10/3))/((phi)**2))*D_CH4_a
+            D_CH4_soil_a(i) = (((fair(i))**(10./3.))/((phi)**2))*D_CH4_a
             D_CH4_soil_b(i) = D_CH4_W
             if (fair(i) .ge. 0.05) then
                 D_CH4_soil(i) = D_CH4_soil_a(i)
@@ -922,7 +923,7 @@ module soil
         Rgas     = 8.3145; ! m3 Pa/K/mol
         
         if (do_EBG) then
-            call ebullition_EBG(rouwater, mebu_out2)
+            call ebullition_EBG(rouwater, mebu_out2, Ebu_sum_sat, Ebu_sum_unsat)
         else
             !use ECT mechanisms for ebullition
             Kebu=1.0                    !unit  h-1   rate constant               
@@ -1044,7 +1045,7 @@ module soil
 
     ! *************************************************************************************
     ! subroutine EBG used by methane submodel
-    subroutine ebullition_EBG(rouwater,mebu_out2)
+    subroutine ebullition_EBG(rouwater,mebu_out2,Ebu_sum_sat,Ebu_sum_unsat)
         ! INPUT:
         !		CH4 = porewater methane in the whole layer, unit=gC/m2, size=nlayers,CH4_V(i) = CH4(i)/(wsc(i)*0.001)
         !		CH4_V(nlayers) = porewater methane concentration, unit=gC/m3, size=nlayers,CH4_V(i) = CH4(i)/(wsc(i)*0.001)

@@ -1,6 +1,10 @@
 module driver
 
     use datatypes
+    use vegetation
+    use soil
+    use transfer
+    use update_and_summary
 
     implicit none
 
@@ -8,10 +12,6 @@ module driver
     subroutine teco_simu(vegn)
         implicit none
         type(vegn_tile_type), intent(inout) :: vegn
-        ! st%Dair = 0
-        ! st%rain_d = 0
-        ! vegn%NSC 
-        ! vegn%NSN
         integer year0, first_year                               ! year0: record the current year to judge whether a new year
         real    Difference                                      ! GPP-Rauto-NPP. Jian: no sure whether for balance? 
         ! real    RaLeaf,RaStem,RaRoot                            ! for summary the automatic respiration of leaf, stem, root
@@ -42,7 +42,7 @@ module driver
             iday  = forcing(iclim)%doy                    
             ihour = forcing(iclim)%hour
             ! if it is a new year
-            if ((iday .eq. 1) .and. (ihour .eq. 0)) call init_update_year(vegn)
+            if ((iday .eq. 1) .and. (ihour .eq. 0)) call init_yearly(vegn)
             if (do_simu .and. (iday .eq. 1) .and. (ihour .eq. 0)) write(*,*)iyear
             if (do_spruce) then
                 if ((iyear .eq. 1974) .and. (iday .eq. 1) .and. (ihour .eq. 0))then
@@ -109,7 +109,7 @@ module driver
                     vegn%allSp(ipft)%NSCmax  = 0.05*(vegn%allSp(ipft)%StemSap+vegn%allSp(ipft)%RootSap+vegn%allSp(ipft)%QC(1))          ! Jian: update the NSCmax each step? and fixed NSCmin  = 5.? 
                 enddo
                 if(st%Ta.gt.5.0) st%GDD5 = st%GDD5+st%Ta
-                call init_day()                                 ! Jian: initilize the daily data.
+                call init_daily()                                 ! Jian: initilize the daily data.
             endif
 
             ! forcing data --------------------------------------------------------------------------------
@@ -232,19 +232,19 @@ module driver
 
             st%NEE     = vegn%Rauto+st%Rhetero - vegn%GPP
 
-            call updateHourly()
-            call summaryHourly(iTotHourly)
-            call updateDaily()
-            call updateMonthly(hoursOfmonth)
+            call updateHourly(vegn, iclim)    ! hourly simulation
+            call init_hourly()
+            call updateDaily(vegn, iTotDaily)
+            call updateMonthly(vegn, iTotMonthly, hoursOfmonth)
 
-            call updateYearly(hoursOfYear)
+            call updateYearly(vegn, iyear, hoursOfYear)
 
             if (ihour .eq. 23) then
-                call summaryDaily(iTotDaily)
+                call init_daily()
+                iTotDaily = iTotDaily + 1 
             end if
-            call update_summary_monthly()
             
-            if (do_mcmc) call GetSimuData(iyear, iday, ihour)
+            ! if (do_mcmc) call GetSimuData(iyear, iday, ihour)
                  
             if (iclim < nforcing)then
                 if (forcing(iclim+1)%year>iyear) then            
@@ -364,5 +364,24 @@ module driver
         endif
         return
     end subroutine update_hoursOfYear_daysOfmonth_initMonthly
+
+    subroutine update_summary_monthly(iday, ihour, daysOfmonth, iTotMonthly)
+        implicit none
+        integer, intent(in) :: iday, ihour, daysOfmonth(12)
+        integer, intent(inout) :: iTotMonthly
+        ! January
+        if ((iday .eq. daysOfmonth(1))  .and. (ihour .eq. 23)) iTotMonthly = iTotMonthly + 1
+        if ((iday .eq. daysOfmonth(2))  .and. (ihour .eq. 23)) iTotMonthly = iTotMonthly + 1
+        if ((iday .eq. daysOfmonth(3))  .and. (ihour .eq. 23)) iTotMonthly = iTotMonthly + 1
+        if ((iday .eq. daysOfmonth(4))  .and. (ihour .eq. 23)) iTotMonthly = iTotMonthly + 1
+        if ((iday .eq. daysOfmonth(5))  .and. (ihour .eq. 23)) iTotMonthly = iTotMonthly + 1
+        if ((iday .eq. daysOfmonth(6))  .and. (ihour .eq. 23)) iTotMonthly = iTotMonthly + 1
+        if ((iday .eq. daysOfmonth(7))  .and. (ihour .eq. 23)) iTotMonthly = iTotMonthly + 1
+        if ((iday .eq. daysOfmonth(8))  .and. (ihour .eq. 23)) iTotMonthly = iTotMonthly + 1
+        if ((iday .eq. daysOfmonth(9))  .and. (ihour .eq. 23)) iTotMonthly = iTotMonthly + 1
+        if ((iday .eq. daysOfmonth(10)) .and. (ihour .eq. 23)) iTotMonthly = iTotMonthly + 1
+        if ((iday .eq. daysOfmonth(11)) .and. (ihour .eq. 23)) iTotMonthly = iTotMonthly + 1
+        if ((iday .eq. daysOfmonth(12)) .and. (ihour .eq. 23)) iTotMonthly = iTotMonthly + 1
+    end subroutine update_summary_monthly
     
 end module driver
