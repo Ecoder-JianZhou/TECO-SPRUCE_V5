@@ -85,6 +85,7 @@ module transfer
             SNfine   = exp(-(vegn%allSp(ipft)%CN0(4)-vegn%allSp(ipft)%CN(4))/vegn%allSp(ipft)%CN0(4)) 
             SNcoarse = exp(-(vegn%allSp(ipft)%CN0(5)-vegn%allSp(ipft)%CN(5))/vegn%allSp(ipft)%CN0(5)) 
             ! the carbon leaving the pools
+            ! print *, "outc:", vegn%allSp(ipft)%L_fall, vegn%allSp(ipft)%QC(2), vegn%allSp(ipft)%tauC(2)*S_omega
             vegn%allSp(ipft)%OutC(1)  = vegn%allSp(ipft)%L_fall
             vegn%allSp(ipft)%OutC(2)  = vegn%allSp(ipft)%QC(2)/vegn%allSp(ipft)%tauC(2)*S_omega !*exp(CN(2)/CN0(2)-1.) 
             vegn%allSp(ipft)%OutC(3)  = vegn%allSp(ipft)%QC(3)/vegn%allSp(ipft)%tauC(3)*S_omega
@@ -222,16 +223,24 @@ module transfer
             vegn%allSp(ipft)%Rnitrogen = costCuptake + costCfix + costCreuse
 
             ! Nitrogen using, non-structural nitrogen pool, NSN
-            vegn%allSp(ipft)%N_leaf = AMIN1(vegn%allSp(ipft)%NPP * vegn%allSp(ipft)%alpha_L/vegn%allSp(ipft)%CN(1) + &
+            vegn%allSp(ipft)%N_leaf = AMAX1(AMIN1(vegn%allSp(ipft)%NPP * vegn%allSp(ipft)%alpha_L/vegn%allSp(ipft)%CN(1) + &
                                             vegn%allSp(ipft)%QC(1)/vegn%allSp(ipft)%CN0(1) -                         &
-                                            vegn%allSp(ipft)%QC(1)/vegn%allSp(ipft)%CN(1),  0.2*vegn%allSp(ipft)%NSN)
-            vegn%allSp(ipft)%N_wood = AMIN1(vegn%allSp(ipft)%NPP*vegn%allSp(ipft)%alpha_W/vegn%allSp(ipft)%CN(2),    &
-                                            0.1*vegn%allSp(ipft)%NSN)
-            vegn%allSp(ipft)%N_root = AMIN1(vegn%allSp(ipft)%NPP*vegn%allSp(ipft)%alpha_R/vegn%allSp(ipft)%CN(3) +   &
+                                            vegn%allSp(ipft)%QC(1)/vegn%allSp(ipft)%CN(1),  0.2*vegn%allSp(ipft)%NSN),0.)
+            vegn%allSp(ipft)%N_wood = AMAX1(AMIN1(vegn%allSp(ipft)%NPP*vegn%allSp(ipft)%alpha_W/vegn%allSp(ipft)%CN(2),    &
+                                            0.1*vegn%allSp(ipft)%NSN), 0.)
+            vegn%allSp(ipft)%N_root = AMAX1(AMIN1(vegn%allSp(ipft)%NPP*vegn%allSp(ipft)%alpha_R/vegn%allSp(ipft)%CN(3) +   &
                                             vegn%allSp(ipft)%QC(3)/vegn%allSp(ipft)%CN0(3) -                         &
-                                            vegn%allSp(ipft)%QC(3)/vegn%allSp(ipft)%CN(3),0.2*vegn%allSp(ipft)%NSN)
+                                            vegn%allSp(ipft)%QC(3)/vegn%allSp(ipft)%CN(3),0.2*vegn%allSp(ipft)%NSN),0.)
             vegn%allSp(ipft)%NSN    = vegn%allSp(ipft)%NSN- &
                                       (vegn%allSp(ipft)%N_leaf+vegn%allSp(ipft)%N_wood+vegn%allSp(ipft)%N_root)
+            print *, "NSN1", vegn%allSp(ipft)%NSN, vegn%allSp(ipft)%N_transfer, vegn%allSp(ipft)%N_uptake, &
+            vegn%allSp(ipft)%N_fixation
+            print *, "NSN2", vegn%allSp(ipft)%N_leaf, vegn%allSp(ipft)%N_wood, vegn%allSp(ipft)%N_root
+            print *, "NSN3", vegn%allSp(ipft)%OutN(1), vegn%allSp(ipft)%OutN(2), vegn%allSp(ipft)%OutN(3), vegn%allSp(ipft)%alphaN
+            print *, "NSN4", N_demand + vegn%allSp(ipft)%N_deficit,  N_demand, vegn%allSp(ipft)%N_deficit,  &
+            &     st%QNminer, vegn%allSp(ipft)%QC(3), (vegn%allSp(ipft)%QC(3)),Qroot0,  &
+            &     Nup0, vegn%allSp(ipft)%NSC, (ksye/st%QNminer), ksye, st%QNminer
+            if(vegn%allSp(ipft)%NSN < 0.) stop
 
             ! N_LF   = OutN(1)*(1.-alphaN)
             ! N_WF   = OutN(2)*(1.-alphaN)
@@ -277,6 +286,7 @@ module transfer
         ! update plant carbon pools, ! daily change of each pool size
         ! call matrix_struct()
         do ipft = 1, vegn%npft
+            ! print *, "QC: ", vegn%allSp(ipft)%QC(1), vegn%allSp(ipft)%OutC(1),  vegn%allSp(ipft)%NPP_L
             vegn%allSp(ipft)%QC(1) = vegn%allSp(ipft)%QC(1) - vegn%allSp(ipft)%OutC(1) + vegn%allSp(ipft)%NPP_L
             vegn%allSp(ipft)%QC(2) = vegn%allSp(ipft)%QC(2) - vegn%allSp(ipft)%OutC(2) + vegn%allSp(ipft)%NPP_W
             vegn%allSp(ipft)%QC(3) = vegn%allSp(ipft)%QC(3) - vegn%allSp(ipft)%OutC(3) + vegn%allSp(ipft)%NPP_R

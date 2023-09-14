@@ -9,28 +9,29 @@ module update_and_summary
         implicit none
         integer, intent(in) :: itime
         type(vegn_tile_type), intent(inout) :: vegn
-        call updateOutVars(itime, 0, vegn, outVars_h)
+        if (do_out_hr) call updateOutVars(itime, 0, vegn, outVars_h)
     end subroutine updateHourly
 
     subroutine updateDaily(vegn, itime)
         implicit none
         integer, intent(in) :: itime
         type(vegn_tile_type), intent(inout) :: vegn
-        call updateOutVars(itime, 24, vegn, outVars_d)
+        if (do_out_day) call updateOutVars(itime, 24, vegn, outVars_d)
+        ! write(*,*) outVars_d%cLeaf(itime), 24, itime, st%QC(1)
     end subroutine updateDaily
 
     subroutine updateMonthly(vegn, itime, hoursOfmonth)
         implicit none
         integer, intent(in) :: itime, hoursOfmonth
         type(vegn_tile_type), intent(inout) :: vegn
-        call updateOutVars(itime, hoursOfmonth, vegn, outVars_m)
+        if (do_out_mon) call updateOutVars(itime, hoursOfmonth, vegn, outVars_m)
     end subroutine updateMonthly
 
     subroutine updateYearly(vegn, itime, hoursOfYear)
         implicit none
         integer, intent(in) :: itime, hoursOfYear
         type(vegn_tile_type), intent(inout) :: vegn
-        call updateOutVars(itime, hoursOfYear, vegn, outVars_y)
+        if(do_out_yr) call updateOutVars(itime, hoursOfYear, vegn, outVars_y)
     end subroutine updateYearly
 
     subroutine updateOutVars(itime, ntime, vegn, outvars)
@@ -40,6 +41,8 @@ module update_and_summary
         type(vegn_tile_type), intent(in) :: vegn
         integer :: ipft, npft
         ! integer iTotHourly
+        
+        ! stop
         convert_g2kg = 0.001
         convert_h2s  = 1/3600.
         if (allocated(outvars%allSpec)) then
@@ -48,6 +51,10 @@ module update_and_summary
                 ! carbon fluxes (Kg C m-2 s-1)
                 outvars%allSpec(ipft)%gpp(itime)      = outvars%allSpec(ipft)%gpp(itime)     + &
                                                           vegn%allSp(ipft)%gpp*convert_g2kg*convert_h2s/ntime
+                if (outvars%allSpec(ipft)%gpp(itime) > 100 .or. outvars%allSpec(ipft)%gpp(itime) < 0.) then
+                    print *, outvars%allSpec(ipft)%gpp(itime), vegn%allSp(ipft)%gpp*convert_g2kg*convert_h2s/ntime
+                    stop
+                endif
                 ! outvars%allSpec(ipft)%nee           = vegn%allSp(ipft)%NEE
                 outvars%allSpec(ipft)%npp(itime)      = outvars%allSpec(ipft)%npp(itime)     + &
                                                           vegn%allSp(ipft)%npp*convert_g2kg*convert_h2s/ntime
@@ -103,7 +110,7 @@ module update_and_summary
         outvars%nppWood(itime)         = outvars%nppWood(itime)  + vegn%NPP_W*convert_g2kg*convert_h2s/ntime  
         outvars%nppStem(itime)         = outvars%nppStem(itime)  + vegn%NPP_W*convert_g2kg*convert_h2s/ntime 
         outvars%nppRoot(itime)         = outvars%nppRoot(itime)  + vegn%NPP_R*convert_g2kg*convert_h2s/ntime
-        outvars%nppOther(itime)        = outvars%nppOther(itime) + 0*convert_g2kg*convert_h2s/ntime 
+        outvars%nppOther(itime)        = outvars%nppOther(itime) + vegn%NSC*convert_g2kg*convert_h2s/ntime 
         outvars%ra(itime)              = outvars%ra(itime)       + vegn%Rauto*convert_g2kg*convert_h2s/ntime
         outvars%raLeaf(itime)          = outvars%raLeaf(itime)   + vegn%Rmleaf*convert_g2kg*convert_h2s/ntime
         outvars%raStem(itime)          = outvars%raStem(itime)   + vegn%Rmstem*convert_g2kg*convert_h2s/ntime
@@ -167,6 +174,7 @@ module update_and_summary
         outvars%wtd(itime)             = outvars%wtd(itime) +  (st%zwt/1000)/ntime                                       ! m, Water table depth
         outvars%snd(itime)             = outvars%snd(itime) +  (st%snow_depth/100)/ntime                               ! m, Total snow depth, Jian: change from m to cm in code, and now change from cm to m
         outvars%lai(itime)             = outvars%lai(itime) +  (vegn%LAI)/ntime                                           ! m2 m-2, Leaf area index
+       
     end subroutine updateOutVars
 
     ! subroutine updateHourly(vegn, itime)

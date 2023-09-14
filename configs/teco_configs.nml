@@ -30,9 +30,9 @@
     spinup_configfile = "spinup_configs.nml"
 
     file_site_params  = "parameters.nml"
-    count_pft         = 3
-    spec_names        = "Tree", "Shrub", "Sphag"
-    files_pft_params  = "parameters.nml", "parameters.nml", "parameters.nml"
+    count_pft         = 3                           ! max pft: 10
+    spec_names_0        = "Tree", "Shrub", "Sphag"
+    files_pft_params_0  = "parameters.nml", "parameters.nml", "parameters.nml"
 /
 
 &nml_exps

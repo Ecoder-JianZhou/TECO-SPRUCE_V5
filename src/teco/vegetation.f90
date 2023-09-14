@@ -31,6 +31,13 @@ module vegetation
       radsol = AMAX1(radsol,0.01)
       call yrday(doy, hour, lat, radsol, fbeam)  ! calculate beam fraction in incoming solar radiation
       coszen = sinbet(doy, hour, lat)
+      if(st%topfws.gt.0.5) then
+         rhoS(2)=0.18
+      else
+         rhoS(2)=0.52-0.68*st%topfws
+      endif
+      Radabv(1) = 0.5 * radsol
+      Radabv(2) = 0.5 * radsol
 
       do ipft = 1, vegn%npft
          call xlayers(vegn%allSp(ipft), iforcing, fbeam, coszen, Radabv, Aleaf, Eleaf, Hleaf, gbleaf, gsleaf, &
@@ -217,6 +224,9 @@ module vegetation
       GrowthS = MAX(0.0, GrowthP - (GrowthL + GrowthR))                        ! *c2/(1.+c1+c2)
 
       spec%npp    = GrowthL + GrowthR + GrowthS + spec%add       ! Modified by Jiang Jiang 2015/10/13
+      write(*,*) "test: NPP1 ", spec%npp, GrowthL, GrowthR, GrowthS, spec%add
+      write(*,*) "test: NPP2 ", GPmax*spec%fnsc*scalT*(1.-exp(-spec%NSN)),0.004*spec%NSC,0.004*spec%NSN*CNp0
+      write(*,*) "test: NPP3 ", GPmax,spec%fnsc,scalT,spec%NSN,spec%NSC,CNp0
       addaccu     = addaccu + spec%add
       GrowthLaccu = GrowthLaccu + GrowthL
       GrowthRaccu = GrowthRaccu + GrowthR
@@ -264,6 +274,7 @@ module vegetation
          gamma_T = 0.
          gamma_N = 0.
       end if
+      ! print *, "L_fall: ", spec%bmleaf, 0.48*gamma_N, spec%tauC(1), st%scalW
       spec%L_fall = spec%bmleaf*0.48*gamma_N     ! L_fall=bmleaf*0.48*AMIN1((gamma_T+gamma_N),0.99)
       return
    end subroutine plantgrowth
@@ -352,6 +363,7 @@ module vegetation
       data Gaussw/0.1184635, 0.2393144, 0.2844444, 0.2393144, 0.1184635/
       data Gaussw_cum/0.11846, 0.35777, 0.64222, 0.88153, 1.0/
 
+      ! print *, "LAI", spec%LAI
       flait  = spec%LAI                 ! Jian: LAI relavant variable from vegetable to energy
       wind   = iforcing%WS
       Dair   = iforcing%VPD    ! air water vapour defficit? Unit Pa
@@ -439,9 +451,9 @@ module vegetation
          eJmxx  = spec%eJmx0*scalex
          if (radabv(1) .ge. 10.0) then                          !check solar Radiation > 10 W/m2
             ! leaf stomata-photosynthesis-transpiration model - daytime
-            call agsean_day(spec, iforcing, windUx, grdn, Qabs, Rnstar, Vcmxx, eJmxx, Tleaf)
+            call agsean_day(spec, iforcing, windUx, grdn, Qabs, Rnstar, Vcmxx, eJmxx, Tleaf, Aleaf)
          else
-            call agsean_ngt(spec, iforcing, windUx, grdn, Qabs, Rnstar, Vcmxx, Tleaf)
+            call agsean_ngt(spec, iforcing, windUx, grdn, Qabs, Rnstar, Vcmxx, Tleaf, Aleaf)
          end if
          fslt      = exp(-extKb*flai)                        !fraction of sunlit leaves
          fshd      = 1.0 - fslt                                !fraction of shaded leaves
@@ -462,6 +474,7 @@ module vegetation
 
          Acan1      = Acan1 + fslt*Aleaf(1)*Gaussw(ng)*flait*spec%stom_n    !amphi/hypostomatous
          Acan2      = Acan2 + fshd*Aleaf(2)*Gaussw(ng)*flait*spec%stom_n
+
          AcanL(ng)  = Acan1 + Acan2
 
          layer1(ng) = Aleaf(1)
@@ -502,6 +515,8 @@ module vegetation
       QLleaf   = emleaf*sigma*(Tlk1**4)*exp(-extkb*flait)           &
                  &      + emleaf*sigma*(Tlk2**4)*(1.0 - exp(-extkb*flait))
       if(ISNAN(QLleaf)) then
+         ! write(*,*) extKb, flai, exp(-extKb*flai)
+         ! write(*,*) fslt, Tleaf(1), Gaussw, flait
          write(*,*)"QLleaf is NAN1111: ",QLleaf, emleaf, sigma, Tlk1, extKb, flait, Tlk2, extkd, Tleaf1, FLAIT1
          stop
       endif
@@ -638,7 +653,7 @@ module vegetation
       return
    end subroutine goudriaan
 
-   subroutine agsean_day(spec, iforcing, windUx, grdn, Qabs, Rnstar, Vcmxx, eJmxx, Tleaf)
+   subroutine agsean_day(spec, iforcing, windUx, grdn, Qabs, Rnstar, Vcmxx, eJmxx, Tleaf, Aleaf)
       implicit none
       type(spec_data_type), intent(inout) :: spec
       type(forcing_data_type), intent(in) :: iforcing
@@ -751,7 +766,7 @@ module vegetation
    end subroutine agsean_day
 
    ! -------------------------------------------------------------------------
-   subroutine agsean_ngt(spec, iforcing, windUx, grdn, Qabs, Rnstar, Vcmxx, Tleaf)
+   subroutine agsean_ngt(spec, iforcing, windUx, grdn, Qabs, Rnstar, Vcmxx, Tleaf, Aleaf)
       implicit none
       type(spec_data_type), intent(inout) :: spec
       type(forcing_data_type), intent(in) :: iforcing
@@ -844,6 +859,7 @@ module vegetation
             Hleaf(ileaf) = Y*(Rnstar(ileaf) - Eleaf(ileaf))
             ! calculate new leaf temperature (K)
             Tlk1 = 273.2 + iforcing%Tair + Hleaf(ileaf)*(rbH/2.+raero)/rhocp
+            ! write (*,*) "Tlk1",Tlk1,"Hleaf(ileaf)",Hleaf(ileaf),"rbH",rbH,"raero",raero,"rhocp",rhocp
             ! calculate Dleaf use LE=(rhocp/psyc)*gsw*Ds
             Dleaf = psyc*Eleaf(ileaf)/(rhocp*gswv)
             gbleaf(ileaf) = gbc*1.32*1.075

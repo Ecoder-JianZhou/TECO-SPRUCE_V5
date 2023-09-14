@@ -221,7 +221,7 @@ module datatypes
         real :: Rgrowth
         real :: NPP_L, NPP_W, NPP_R
         ! states
-        real :: QC(5), QN(5), CN0(5), CN(5), tauC(5), OutC(8)            ! leaf, stem, root, Litm, Lits
+        real :: QC(8), QN(8), CN0(8), CN(8), tauC(8), OutC(8)            ! leaf, stem, root, Litm, Lits
         real :: bmleaf, bmstem, bmroot, bmplant 
         real :: StemSap, RootSap, NSC, NSCmax, NSCmin, add
         real :: Stemmax, Rootmax
@@ -406,6 +406,7 @@ module datatypes
         real :: f_F2M, f_C2M, f_C2S
         real :: f_M2S, f_M2P, f_S2P
         real :: f_S2M, f_P2M
+        real :: hmax, hl0, LAIMAX0, la0
     end type nml_params_data_type
 
     type nml_initValue_data_type
@@ -442,17 +443,22 @@ contains
     subroutine read_teco_configs()
         implicit none
         integer io
+        character(300) :: spec_names_0(10), files_pft_params_0(10)
         namelist /nml_teco_settings/ case_name, do_simu, do_mcmc, do_spinup, do_matrix, &
             do_restart, do_snow, do_soilphy, do_EBG, do_ndep, do_leap, do_out_hr,       &
             do_out_day, do_out_mon, do_out_yr, dtimes, inDir, outDir, climfile,         &
             watertablefile, snowdepthfile, in_restartfile, mcmc_configfile,             &
-            spinup_configfile, file_site_params, count_pft, spec_names, files_pft_params
+            spinup_configfile, file_site_params, count_pft, spec_names_0, files_pft_params_0
         namelist /nml_exps/ Ttreat, CO2treat, N_fert
         print *, "# read TECO config nml file ...", teco_configfile
         open(388, file = teco_configfile)
         read(388, nml  = nml_teco_settings,  iostat=io)
         read(388, nml  = nml_exps,           iostat=io)
         close(388)
+        allocate(spec_names(count_pft))
+        allocate(files_pft_params(count_pft))
+        spec_names = spec_names_0(1:count_pft)
+        files_pft_params = files_pft_params_0(1:count_pft)
     end subroutine read_teco_configs
 
     subroutine read_parameters_nml(param_nml_file, in_params, init_params)
@@ -493,6 +499,7 @@ contains
         real :: f_F2M, f_C2M, f_C2S
         real :: f_M2S, f_M2P, f_S2P
         real :: f_S2M, f_P2M
+        real :: hmax, hl0, LAIMAX0, la0
         ! ----------------------------------------------------
         namelist/nml_params/ lat, lon, wsmax, wsmin, LAImax, LAImin, rdepth,    &
             Rootmax, Stemmax, SapR, SapS, SLAx, GLmax, GRmax, Gsmax, stom_n,    &
@@ -500,7 +507,7 @@ contains
             Tau_F, Tau_C, Tau_Micro, Tau_SlowSOM, Tau_Passive, gddonset, Q10,   &
             Q10rh, Rl0, Rs0, Rr0, r_me, Q10pro, kCH4, Omax, CH4_thre, Tveg,     &
             Tpro_me, Toxi, f, bubprob, Vmaxfraction, JV, Entrpy, etaL, etaW,    &
-            etaR, f_F2M, f_C2M, f_C2S, f_M2S, f_M2P, f_S2P, f_S2M, f_P2M
+            etaR, f_F2M, f_C2M, f_C2S, f_M2S, f_M2P, f_S2P, f_S2M, f_P2M, hmax, hl0, LAIMAX0, la0 
         ! ------------------------------------------------------------------------
         ! parameters that are needed to be initilized.
         real :: QC(8), CN0(8)               ! leaf,wood,root,fine lit.,coarse lit.,Micr,Slow,Pass
@@ -606,6 +613,10 @@ contains
         in_params%f_S2P  = f_S2P
         in_params%f_S2M  = f_S2M
         in_params%f_P2M  = f_P2M
+        in_params%hmax   = hmax 
+        in_params%hl0    = hl0
+        in_params%LAIMAX0 = LAIMAX0
+        in_params%la0     = la0
         ! =====================================
         init_params%QC             = QC
         init_params%CN0            = CN0            
@@ -698,14 +709,15 @@ contains
         st%bubprob      = in_params%bubprob
         st%Vmaxfraction = in_params%Vmaxfraction
         st%etaW         = in_params%etaW
-        st%tauC(1)      = in_params%Tau_Leaf
-        st%tauC(2)      = in_params%Tau_Wood
-        st%tauC(3)      = in_params%Tau_Root
-        st%tauC(4)      = in_params%Tau_F
-        st%tauC(5)      = in_params%Tau_C
-        st%tauC(6)      = in_params%Tau_Micro
-        st%tauC(7)      = in_params%Tau_slowSOM
-        st%tauC(8)      = in_params%Tau_Passive
+        st%f            = in_params%f
+        st%tauC(1)      = in_params%Tau_Leaf*8760.
+        st%tauC(2)      = in_params%Tau_Wood*8760.
+        st%tauC(3)      = in_params%Tau_Root*8760.
+        st%tauC(4)      = in_params%Tau_F*8760.
+        st%tauC(5)      = in_params%Tau_C*8760.
+        st%tauC(6)      = in_params%Tau_Micro*8760.
+        st%tauC(7)      = in_params%Tau_slowSOM*8760.
+        st%tauC(8)      = in_params%Tau_Passive*8760.
         st%Tpro_me      = in_params%Tpro_me
         st%f_F2M        = in_params%f_F2M
         st%f_C2M        = in_params%f_C2M
@@ -765,6 +777,20 @@ contains
         do i = 1, 10
             st%wcl(i)   = st%wsmax/100.
         enddo
+        do i = 2, nlayers
+            st%depth(i)=st%depth(i-1)+st%THKSL(i)
+        enddo
+        do i=1,nlayers
+            if (st%depth(i) .le. (-st%zwt)*0.1) then
+                st%pwater(i) = 1000*9.81*(st%depth(i)*0.01-(-st%zwt)*0.001)
+            else
+                st%pwater(i) = 0.
+            endif
+            st%presP(i) = 101325 + st%pwater(i)  ! unit Pa
+            st%methanebP(i) = st%f * st%presP(i) * st%Vp(i)/(8.3144621 * (st%Tsoill(i)+273.15))  !unit mol/layer
+            st%methaneP(i) = st%CH4(i)/12
+            ! gC/layer  /12   unit molC/layer
+        enddo
     end subroutine initilize_site
 
     subroutine initilize_vegn(vegn, files_vegn_params)
@@ -823,13 +849,34 @@ contains
         spec%Rr0     = in_params%Rr0
         spec%JV      = in_params%JV
         spec%Entrpy  = in_params%Entrpy
+        spec%alphaN  = init_params%alphaN
         ! 
+        spec%tauC(1)      = in_params%Tau_Leaf*8760.
+        spec%tauC(2)      = in_params%Tau_Wood*8760.
+        spec%tauC(3)      = in_params%Tau_Root*8760.
+        ! st%tauC(4)      = in_params%Tau_F
+        ! st%tauC(5)      = in_params%Tau_C
+        ! st%tauC(6)      = in_params%Tau_Micro
+        ! st%tauC(7)      = in_params%Tau_slowSOM
+        ! st%tauC(8)      = in_params%Tau_Passive
+        spec%QC      = init_params%QC
+        spec%CN0     = init_params%CN0
+        spec%CN      = init_params%CN0
+        spec%QN      = init_params%QC/init_params%CN0
         spec%NSCmin  = init_params%NSCmin
         spec%storage = init_params%Storage
         spec%nsc     = init_params%nsc
         spec%accumulation = init_params%accumulation
         spec%SNvcmax = init_params%SNvcmax
         spec%NSN     = init_params%NSN
+        spec%LAI     = spec%LAImin
+        spec%bmleaf  = spec%QC(1)/0.48
+        spec%bmstem  = spec%QC(2)/0.48
+        spec%bmroot  = spec%QC(3)/0.48
+        spec%hmax    = in_params%hmax        ! in plant growth hmax = 24.19   ! m
+        spec%hl0     = in_params%hl0             ! in plant growth hl0  = 0.00019  ! m2/kg C
+        spec%LAIMAX0 = in_params%LAIMAX0        ! in plant growth LAIMAX0 = 8.    ! maybe the LAImax
+        spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
     end subroutine initilize_spec
 
     subroutine get_forcingdata()
@@ -1022,150 +1069,156 @@ contains
         allocate(outVars%wtd(ntime))
         allocate(outVars%snd(ntime))
         allocate(outVars%lai(ntime))
+        return
     end subroutine assign_outVars
 
-    subroutine init_hourly()
+    subroutine init_hourly(itime)
         implicit none
+        integer, intent(in) :: itime
         ! type(vegn_tile_type), intent(inout) :: vegn
         ! integer ipft
         ! do ipft = 1, vegn%npft
         !     vegn%allSp(ipft)%onset = 0
         ! enddo 
-        call init_outVars(outVars_h)
+        if (do_out_hr) call init_outVars(outVars_h, itime)
     end subroutine init_hourly
 
-    subroutine init_daily()
+    subroutine init_daily(itime)
         implicit none
+        integer, intent(in) :: itime
         ! type(vegn_tile_type), intent(inout) :: vegn
         ! integer ipft
         ! do ipft = 1, vegn%npft
         !     vegn%allSp(ipft)%onset = 0
         ! enddo 
-        call init_outVars(outVars_d)
+        if (do_out_day) call init_outVars(outVars_d, itime)
     end subroutine init_daily
 
-    subroutine init_monthly()
+    subroutine init_monthly(itime)
         implicit none
-        call init_outVars(outVars_h)
+        integer, intent(in) :: itime
+        if(do_out_mon) call init_outVars(outVars_h, itime)
     end subroutine init_monthly
 
-    subroutine init_yearly(vegn)
+    subroutine init_yearly(vegn, itime)
         implicit none
+        integer, intent(in) :: itime
         type(vegn_tile_type), intent(inout) :: vegn
         integer ipft
         st%GDD5 = 0.
         do ipft = 1, vegn%npft
             vegn%allSp(ipft)%onset = 0
         enddo 
-        call init_outVars(outVars_y)
+        if (do_out_yr) call init_outVars(outVars_y, itime)
     end subroutine init_yearly
 
-    subroutine init_outVars(outVars)
+    subroutine init_outVars(outVars, itime)
         implicit none
+        integer, intent(in) :: itime
         type(outvars_data_type), intent(inout) :: outVars
         integer :: npft, ipft
         if (allocated(outVars%allSpec))then
             npft = size(outVars%allSpec)
             do ipft = 1, npft
                 ! carbon fluxes (Kg C m-2 s-1)
-                outVars%allSpec(ipft)%gpp      = 0.
-                outVars%allSpec(ipft)%nee      = 0.
-                outVars%allSpec(ipft)%npp      = 0.
-                outVars%allSpec(ipft)%nppLeaf  = 0.
-                outVars%allSpec(ipft)%nppWood  = 0.
-                outVars%allSpec(ipft)%nppStem  = 0.
-                outVars%allSpec(ipft)%nppRoot  = 0.
-                outVars%allSpec(ipft)%nppOther = 0.    ! According to SPRUCE-MIP, stem means above ground woody tissues which is different from wood tissues.
-                outVars%allSpec(ipft)%ra       = 0.
-                outVars%allSpec(ipft)%raLeaf   = 0.
-                outVars%allSpec(ipft)%raStem   = 0.
-                outVars%allSpec(ipft)%raRoot   = 0.
-                outVars%allSpec(ipft)%raOther  = 0.
-                outVars%allSpec(ipft)%rMaint   = 0.
-                outVars%allSpec(ipft)%rGrowth  = 0.
-                outVars%allSpec(ipft)%nbp      = 0.
+                outVars%allSpec(ipft)%gpp(itime)      = 0.
+                outVars%allSpec(ipft)%nee(itime)      = 0.
+                outVars%allSpec(ipft)%npp(itime)      = 0.
+                outVars%allSpec(ipft)%nppLeaf(itime)  = 0.
+                outVars%allSpec(ipft)%nppWood(itime)  = 0.
+                outVars%allSpec(ipft)%nppStem(itime)  = 0.
+                outVars%allSpec(ipft)%nppRoot(itime)  = 0.
+                outVars%allSpec(ipft)%nppOther(itime) = 0.    ! According to SPRUCE-MIP, stem means above ground woody tissues which is different from wood tissues.
+                outVars%allSpec(ipft)%ra(itime)       = 0.
+                outVars%allSpec(ipft)%raLeaf(itime)   = 0.
+                outVars%allSpec(ipft)%raStem(itime)   = 0.
+                outVars%allSpec(ipft)%raRoot(itime)   = 0.
+                outVars%allSpec(ipft)%raOther(itime)  = 0.
+                outVars%allSpec(ipft)%rMaint(itime)   = 0.
+                outVars%allSpec(ipft)%rGrowth(itime)  = 0.
+                outVars%allSpec(ipft)%nbp(itime)      = 0.
                 ! Carbon Pools  (KgC m-2)
-                outVars%allSpec(ipft)%cLeaf    = 0.
-                outVars%allSpec(ipft)%cStem    = 0.
-                outVars%allSpec(ipft)%cRoot    = 0.
+                outVars%allSpec(ipft)%cLeaf(itime)    = 0.
+                outVars%allSpec(ipft)%cStem(itime)    = 0.
+                outVars%allSpec(ipft)%cRoot(itime)    = 0.
                 ! Nitrogen pools (kgN m-2)
-                outVars%allSpec(ipft)%nLeaf    = 0.
-                outVars%allSpec(ipft)%nStem    = 0.
-                outVars%allSpec(ipft)%nRoot    = 0.
+                outVars%allSpec(ipft)%nLeaf(itime)    = 0.
+                outVars%allSpec(ipft)%nStem(itime)    = 0.
+                outVars%allSpec(ipft)%nRoot(itime)    = 0.
                 ! water fluxes (kg m-2 s-1)
-                outVars%allSpec(ipft)%tran     = 0.
+                outVars%allSpec(ipft)%tran(itime)     = 0.
                 ! other
-                outVars%allSpec(ipft)%lai      = 0. 
+                outVars%allSpec(ipft)%lai(itime)      = 0. 
             enddo
         endif
-        outVars%gpp              = 0.
-        outVars%nee              = 0.
-        outVars%npp              = 0.
-        outVars%nppLeaf          = 0.
-        outVars%nppWood          = 0.
-        outVars%nppStem          = 0.
-        outVars%nppRoot          = 0.
-        outVars%nppOther         = 0.  
-        outVars%ra               = 0.
-        outVars%raLeaf           = 0.
-        outVars%raStem           = 0.
-        outVars%raRoot           = 0.
-        outVars%raOther          = 0.
-        outVars%rMaint           = 0.
-        outVars%rGrowth          = 0.
-        outVars%rh               = 0.
-        outVars%nbp              = 0.
-        outVars%wetlandCH4       = 0.
-        outVars%wetlandCH4prod   = 0.
-        outVars%wetlandCH4cons   = 0. 
+        outVars%gpp(itime)              = 0.
+        outVars%nee(itime)              = 0.
+        outVars%npp(itime)              = 0.
+        outVars%nppLeaf(itime)          = 0.
+        outVars%nppWood(itime)          = 0.
+        outVars%nppStem(itime)          = 0.
+        outVars%nppRoot(itime)          = 0.
+        outVars%nppOther(itime)         = 0.  
+        outVars%ra(itime)               = 0.
+        outVars%raLeaf(itime)           = 0.
+        outVars%raStem(itime)           = 0.
+        outVars%raRoot(itime)           = 0.
+        outVars%raOther(itime)          = 0.
+        outVars%rMaint(itime)           = 0.
+        outVars%rGrowth(itime)          = 0.
+        outVars%rh(itime)               = 0.
+        outVars%nbp(itime)              = 0.
+        outVars%wetlandCH4(itime)       = 0.
+        outVars%wetlandCH4prod(itime)   = 0.
+        outVars%wetlandCH4cons(itime)   = 0. 
         ! Carbon Pools  (KgC m-2)
-        outVars%cLeaf            = 0.
-        outVars%cStem            = 0.
-        outVars%cRoot            = 0.
-        outVars%cOther           = 0.
-        outVars%cLitter          = 0.
-        outVars%cLitterCwd       = 0.  
-        outVars%cSoil            = 0.
-        outVars%cSoilLevels      = 0.
-        outVars%cSoilFast        = 0.
-        outVars%cSoilSlow        = 0.
-        outVars%cSoilPassive     = 0. 
-        outVars%CH4              = 0.
+        outVars%cLeaf(itime)            = 0.
+        outVars%cStem(itime)            = 0.
+        outVars%cRoot(itime)            = 0.
+        outVars%cOther(itime)           = 0.
+        outVars%cLitter(itime)          = 0.
+        outVars%cLitterCwd(itime)       = 0.  
+        outVars%cSoil(itime)            = 0.
+        outVars%cSoilLevels(itime,:)      = 0.
+        outVars%cSoilFast(itime)        = 0.
+        outVars%cSoilSlow(itime)        = 0.
+        outVars%cSoilPassive(itime)     = 0. 
+        outVars%CH4(itime,:)              = 0.
         ! Nitrogen fluxes (kgN m-2 s-1)
-        outVars%fBNF             = 0.
-        outVars%fN2O             = 0.
-        outVars%fNloss           = 0.
-        outVars%fNnetmin         = 0.
-        outVars%fNdep            = 0.  
+        outVars%fBNF(itime)             = 0.
+        outVars%fN2O(itime)             = 0.
+        outVars%fNloss(itime)           = 0.
+        outVars%fNnetmin(itime)         = 0.
+        outVars%fNdep(itime)            = 0.  
         ! Nitrogen pools (kgN m-2)
-        outVars%nLeaf            = 0.
-        outVars%nStem            = 0.
-        outVars%nRoot            = 0.
-        outVars%nOther           = 0.
-        outVars%nLitter          = 0.
-        outVars%nLitterCwd       = 0.
-        outVars%nSoil            = 0.
-        outVars%nMineral         = 0. 
+        outVars%nLeaf(itime)            = 0.
+        outVars%nStem(itime)            = 0.
+        outVars%nRoot(itime)            = 0.
+        outVars%nOther(itime)           = 0.
+        outVars%nLitter(itime)          = 0.
+        outVars%nLitterCwd(itime)       = 0.
+        outVars%nSoil(itime)            = 0.
+        outVars%nMineral(itime)         = 0. 
         ! energy fluxes (W m-2)
-        outVars%hfls             = 0.
-        outVars%hfss             = 0.
-        outVars%SWnet            = 0.
-        outVars%LWnet            = 0.
+        outVars%hfls(itime)             = 0.
+        outVars%hfss(itime)             = 0.
+        outVars%SWnet(itime)            = 0.
+        outVars%LWnet(itime)            = 0.
         ! water fluxes (kg m-2 s-1)
-        outVars%ec               = 0.
-        outVars%tran             = 0.
-        outVars%es               = 0.   
-        outVars%hfsbl            = 0.  
-        outVars%mrro             = 0.
-        outVars%mrros            = 0.
-        outVars%mrrob            = 0.   
+        outVars%ec(itime)               = 0.
+        outVars%tran(itime)             = 0.
+        outVars%es(itime)               = 0.   
+        outVars%hfsbl(itime)            = 0.  
+        outVars%mrro(itime)             = 0.
+        outVars%mrros(itime)            = 0.
+        outVars%mrrob(itime)            = 0.   
         ! other
-        outVars%mrso             = 0.  
-        outVars%tsl              = 0.
-        outVars%tsland           = 0.                 
-        outVars%wtd              = 0.           
-        outVars%snd              = 0.           
-        outVars%lai              = 0.
+        outVars%mrso(itime,:)             = 0.  
+        outVars%tsl(itime,:)              = 0.
+        outVars%tsland(itime)           = 0.                 
+        outVars%wtd(itime)              = 0.           
+        outVars%snd(itime)              = 0.           
+        outVars%lai(itime)              = 0.
     end subroutine init_outVars
 
     subroutine deallocate_results(outVars)
@@ -1281,5 +1334,7 @@ contains
     subroutine deallocate_date_type()
         if (allocated(forcing)) deallocate(forcing)
         if (allocated(snow_in)) deallocate(snow_in)
+        if (allocated(spec_names)) deallocate(spec_names)
+        if (allocated(files_pft_params)) deallocate(files_pft_params)
     end subroutine deallocate_date_type
 end module datatypes

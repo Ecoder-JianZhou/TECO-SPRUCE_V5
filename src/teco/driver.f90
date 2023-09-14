@@ -23,13 +23,14 @@ module driver
         ! real    VPDh, LWH
         real    esat1, eairP
         integer :: iclim, iyear, iday, ihour
-        integer :: iTotHourly, iTotDaily, iTotMonthly
+        integer :: iTotHourly, iTotDaily, iTotMonthly, iTotYearly
         integer :: daysOfyear, daysOfmonth(12), hoursOfYear, hoursOfmonth
         integer :: ipft
         real    :: snow_depth_e, RH, radsol
 
         ! Jian: start the cycle of the forcing data
         first_year = forcing(1)%year
+        ! initilize the output 
         
         do iclim = 1, nforcing 
             if (iclim .eq. 1) then
@@ -37,12 +38,13 @@ module driver
                 iTotHourly  = 1
                 iTotDaily   = 1
                 iTotMonthly = 1
+                iTotYearly  = 1
             endif
             iyear = forcing(iclim)%year                      ! force%year
             iday  = forcing(iclim)%doy                    
             ihour = forcing(iclim)%hour
             ! if it is a new year
-            if ((iday .eq. 1) .and. (ihour .eq. 0)) call init_yearly(vegn)
+            if ((iday .eq. 1) .and. (ihour .eq. 0)) call init_yearly(vegn, year0)
             if (do_simu .and. (iday .eq. 1) .and. (ihour .eq. 0)) write(*,*)iyear
             if (do_spruce) then
                 if ((iyear .eq. 1974) .and. (iday .eq. 1) .and. (ihour .eq. 0))then
@@ -89,9 +91,9 @@ module driver
                 endif
                 ! for update the results of monthly and yearly
                 call update_hoursOfYear_daysOfmonth_initMonthly(iday, ihour, &
-                        daysOfyear, daysOfmonth, hoursOfYear, hoursOfmonth)
+                        daysOfyear, daysOfmonth, hoursOfYear, hoursOfmonth, iTotMonthly)
             endif
-        
+
             ! initialize the daily variables to run hourly simulaiton.
             if (ihour .eq. 0) then
                 ! a new day simulation.
@@ -109,7 +111,7 @@ module driver
                     vegn%allSp(ipft)%NSCmax  = 0.05*(vegn%allSp(ipft)%StemSap+vegn%allSp(ipft)%RootSap+vegn%allSp(ipft)%QC(1))          ! Jian: update the NSCmax each step? and fixed NSCmin  = 5.? 
                 enddo
                 if(st%Ta.gt.5.0) st%GDD5 = st%GDD5+st%Ta
-                call init_daily()                                 ! Jian: initilize the daily data.
+                call init_daily(iTotDaily)                                 ! Jian: initilize the daily data.
             endif
 
             ! forcing data --------------------------------------------------------------------------------
@@ -151,9 +153,30 @@ module driver
             else
                 st%G = 20.5
             endif
-            if (isnan(st%G)) stop
-            st%Esoil = 0.05*radsol
-            if(radsol.LE.10.0) st%Esoil = 0.5*st%G
+            if (isnan(st%G)) then
+                print *, st%G
+                stop
+            endif
+            do ipft = 1, vegn%npft
+                vegn%allSp(ipft)%Esoil = (0.05/vegn%npft)* vegn%allSp(ipft)%Esoil
+                if (ipft .eq. 1) then
+                    st%Esoil = vegn%allSp(ipft)%Esoil
+                else
+                    st%Esoil = st%Esoil + vegn%allSp(ipft)%esoil
+                endif
+            enddo
+            ! st%Esoil = 0.05*radsol
+            if(radsol.LE.10.0) then
+                do ipft = 1, vegn%npft
+                    vegn%allSp(ipft)%Esoil = (0.5/vegn%npft)* st%G
+                    if (ipft .eq. 1) then
+                        st%Esoil = vegn%allSp(ipft)%Esoil
+                    else
+                        st%Esoil = st%Esoil + vegn%allSp(ipft)%esoil
+                    endif
+                enddo
+                ! st%Esoil = 0.5*st%G
+            endif
 160 continue        
             ! for daily mean conditions 
             st%ta     = st%ta + forcing(iclim)%Tair/24.0                             ! sum of a day, for calculating daily mean temperature, snow_d and soilwater
@@ -171,7 +194,6 @@ module driver
                 vegn%allSp(ipft)%eJmx0 = 1.67*vegn%allSp(ipft)%Vcmx0 ! Weng 02/21/2011 Medlyn et al. 2002 
                 vegn%allSp(ipft)%eJmx0 = vegn%allSp(ipft)%JV*vegn%allSp(ipft)%Vcmx0   ! added for acclimation study,replace 1.67 with JV Feb 19 2019 Shuang  
             enddo
-          
             call vegn_canopy(vegn, forcing(iclim))      ! run canopy module
             ! run soil water processes
             call soilwater(vegn, forcing(iclim))                      
@@ -186,7 +208,6 @@ module driver
             call TCS_CN(vegn, forcing(iclim))   
             ! if (do_matrix) call matrix_struct() 
             call methane(vegn, forcing(iclim))        !update single value of Rh_pools,Tsoil,zwt,wsc 
-           
             ! update NSC
             do ipft = 1, vegn%npft
                 vegn%allSp(ipft)%Rauto = vegn%allSp(ipft)%Rmain + vegn%allSp(ipft)%Rgrowth + vegn%allSp(ipft)%Rnitrogen
@@ -203,6 +224,7 @@ module driver
                 vegn%allSp(ipft)%bmstem  = vegn%allSp(ipft)%QC(2)/0.48
                 vegn%allSp(ipft)%bmroot  = vegn%allSp(ipft)%QC(3)/0.48
                 vegn%allSp(ipft)%bmplant = vegn%allSp(ipft)%bmleaf + vegn%allSp(ipft)%bmroot + vegn%allSp(ipft)%bmstem
+                ! print *, "check LAI: ",vegn%allSp(ipft)%bmleaf, vegn%allSp(ipft)%SLA
                 vegn%allSp(ipft)%LAI     = vegn%allSp(ipft)%bmleaf*vegn%allSp(ipft)%SLA
                 ! summary
                 if (ipft .eq. 1) then
@@ -214,6 +236,8 @@ module driver
                     vegn%NPP_R = vegn%allSp(ipft)%NPP_R
                     vegn%Rgrowth = vegn%allSp(ipft)%Rgrowth
                     st%Rnitrogen = vegn%allSp(ipft)%Rnitrogen
+                    vegn%NSC      = vegn%allSp(ipft)%NSC
+                    vegn%NSN      = vegn%allSp(ipft)%NSN
                 else
                     vegn%Rauto = vegn%Rauto + vegn%allSp(ipft)%Rauto
                     vegn%gpp   = vegn%gpp   + vegn%allSp(ipft)%gpp
@@ -223,24 +247,29 @@ module driver
                     vegn%NPP_R = vegn%NPP_R + vegn%allSp(ipft)%NPP_R
                     vegn%Rgrowth = vegn%Rgrowth + vegn%allSp(ipft)%Rgrowth
                     st%Rnitrogen = st%Rnitrogen + vegn%allSp(ipft)%Rnitrogen
+                    vegn%NSC     = vegn%NSC + vegn%allSp(ipft)%NSC
+                    vegn%NSN     = vegn%NSN + vegn%allSp(ipft)%NSN
                 endif
             enddo 
-
             ! Rhetero=Rh_f + Rh_c + Rh_Micr + Rh_Slow + Rh_Pass
             st%Rhetero = st%Rh_pools(1) + st%Rh_pools(2) + st%Rh_pools(3) &
                 &      + st%Rh_pools(4) + st%Rh_pools(5)
 
             st%NEE     = vegn%Rauto+st%Rhetero - vegn%GPP
+            
 
             call updateHourly(vegn, iclim)    ! hourly simulation
-            call init_hourly()
+            ! print *, "test", vegn%allSp(1)%gpp, st%QC(4:8), vegn%LAI
+            
+            ! stop
             call updateDaily(vegn, iTotDaily)
+            ! write(*,*) outVars_d%cLeaf(iTotDaily), 24, iTotDaily, st%QC(1)
+            ! print *, "outVar: ", outVars_d%gpp, outVars_h%gpp
             call updateMonthly(vegn, iTotMonthly, hoursOfmonth)
-
             call updateYearly(vegn, iyear, hoursOfYear)
-
+            call init_hourly(iclim)
             if (ihour .eq. 23) then
-                call init_daily()
+                ! call init_daily()
                 iTotDaily = iTotDaily + 1 
             end if
             
@@ -289,11 +318,11 @@ module driver
     end subroutine isLeap_update_daysOfyear
 
     subroutine update_hoursOfYear_daysOfmonth_initMonthly(iday, ihour, &
-        daysOfyear, daysOfmonth, hoursOfYear, hoursOfmonth)
+        daysOfyear, daysOfmonth, hoursOfYear, hoursOfmonth, iTotMonthly)
         implicit none
         integer, intent(in)    :: iday, ihour
         integer, intent(inout) :: daysOfyear, daysOfmonth(12)
-        integer, intent(inout) :: hoursOfYear, hoursOfmonth
+        integer, intent(inout) :: hoursOfYear, hoursOfmonth, iTotMonthly
         if (daysOfyear .eq. 365) then ! common year
             hoursOfYear = 365*24
             daysOfmonth = (/31,59,90,120,151,181,212,243,273,304,334,365/)
@@ -305,62 +334,62 @@ module driver
         ! January:
         if (iday .eq. 1)then 
             hoursOfmonth = (daysOfmonth(1)-0)*24
-            if (ihour .eq. 0) call init_monthly()
+            if (ihour .eq. 0) call init_monthly(iTotMonthly)
         endif
         ! Feburay:
         if (iday .eq. daysOfmonth(1)+1)then
             hoursOfmonth = (daysOfmonth(2)-daysOfmonth(1))*24
-            if (ihour .eq. 0) call init_monthly()
+            if (ihour .eq. 0) call init_monthly(iTotMonthly)
         endif
         ! March
         if (iday .eq. daysOfmonth(2)+1)then
             hoursOfmonth = (daysOfmonth(3)-daysOfmonth(2))*24
-            if (ihour .eq. 0) call init_monthly()
+            if (ihour .eq. 0) call init_monthly(iTotMonthly)
         endif
         ! April
         if (iday .eq. daysOfmonth(3)+1)then
             hoursOfmonth = (daysOfmonth(4)-daysOfmonth(3))*24
-            if (ihour .eq. 0) call init_monthly()
+            if (ihour .eq. 0) call init_monthly(iTotMonthly)
         endif
         ! May
         if (iday .eq. daysOfmonth(4)+1)then
             hoursOfmonth = (daysOfmonth(5)-daysOfmonth(4))*24
-            if (ihour .eq. 0) call init_monthly()
+            if (ihour .eq. 0) call init_monthly(iTotMonthly)
         endif
         ! June
         if (iday .eq. daysOfmonth(5)+1)then
             hoursOfmonth = (daysOfmonth(6)-daysOfmonth(5))*24
-            if (ihour .eq. 0) call init_monthly()
+            if (ihour .eq. 0) call init_monthly(iTotMonthly)
         endif
         ! July
         if(iday .eq. daysOfmonth(6)+1)then
             hoursOfmonth = (daysOfmonth(7)-daysOfmonth(6))*24
-            if (ihour .eq. 0) call init_monthly()
+            if (ihour .eq. 0) call init_monthly(iTotMonthly)
         endif
         ! Auguest
         if(iday .eq. daysOfmonth(7)+1)then
             hoursOfmonth = (daysOfmonth(8)-daysOfmonth(7))*24
-            if (ihour .eq. 0) call init_monthly()
+            if (ihour .eq. 0) call init_monthly(iTotMonthly)
         endif
         ! Septemble
         if(iday .eq. daysOfmonth(8)+1)then
             hoursOfmonth = (daysOfmonth(9)-daysOfmonth(8))*24
-            if (ihour .eq. 0) call init_monthly()
+            if (ihour .eq. 0) call init_monthly(iTotMonthly)
         endif
         ! October
         if(iday .eq. daysOfmonth(9)+1)then
             hoursOfmonth = (daysOfmonth(10)-daysOfmonth(9))*24
-            if (ihour .eq. 0) call init_monthly()
+            if (ihour .eq. 0) call init_monthly(iTotMonthly)
         endif
         ! November
         if(iday .eq. daysOfmonth(10)+1)then
             hoursOfmonth = (daysOfmonth(11)-daysOfmonth(10))*24
-            if (ihour .eq. 0) call init_monthly()
+            if (ihour .eq. 0) call init_monthly(iTotMonthly)
         endif
         ! December
         if(iday .eq. daysOfmonth(11)+1)then
             hoursOfmonth = (daysOfmonth(12)-daysOfmonth(11))*24
-            if (ihour .eq. 0) call init_monthly()
+            if (ihour .eq. 0) call init_monthly(iTotMonthly)
         endif
         return
     end subroutine update_hoursOfYear_daysOfmonth_initMonthly

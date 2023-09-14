@@ -59,11 +59,13 @@ program TECO
 
     call initilize(file_site_params, files_pft_params, vegn)
     count_pft = vegn%npft
+
     if(do_out_hr)  call assign_outVars(nHours,  outVars_h, count_pft)
     if(do_out_day) call assign_outVars(nDays,   outVars_d, count_pft)
     if(do_out_mon) call assign_outVars(nMonths, outVars_m, count_pft)
     if(do_out_yr)  call assign_outVars(nYears,  outVars_y, count_pft)
 
+    print *, allocated(outVars_y%gpp), nYears
     if (.not. do_snow) call get_snowdepth()
     if (do_restart)then
         ! call read_restart(restartfile)     ! this module in "writeOutput2nc.f90"
@@ -130,15 +132,22 @@ subroutine createNewCase()
     call CreateFolder(adjustl(trim(outDir_csv)))
 
     ! update and create the output for each time frequency of nc-format outputs
-    outDir_h = adjustl(trim(outdir_nc))//"/"//adjustl(trim(outDir_h))
-    outDir_d = adjustl(trim(outdir_nc))//"/"//adjustl(trim(outDir_d))
-    outDir_m = adjustl(trim(outdir_nc))//"/"//adjustl(trim(outDir_m))
-    outDir_y = adjustl(trim(outdir_nc))//"/"//adjustl(trim(outDir_y))
-    
-    call CreateFolder(adjustl(trim(outDir_h)))
-    call CreateFolder(adjustl(trim(outDir_d)))
-    call CreateFolder(adjustl(trim(outDir_m)))
-    call CreateFolder(adjustl(trim(outDir_y)))
+    if (do_out_hr) then
+        outDir_h = adjustl(trim(outdir_nc))//"/Hourly"
+        call CreateFolder(adjustl(trim(outDir_h)))
+    endif
+    if (do_out_day) then
+        outDir_d = adjustl(trim(outdir_nc))//"/Daily"
+        call CreateFolder(adjustl(trim(outDir_d)))
+    endif
+    if (do_out_mon) then
+        outDir_m = adjustl(trim(outdir_nc))//"/Monthly"
+        call CreateFolder(adjustl(trim(outDir_m)))
+    endif
+    if (do_out_yr) then
+        outDir_y = adjustl(trim(outdir_nc))//"/Yearly"
+        call CreateFolder(adjustl(trim(outDir_y)))
+    endif
 
     if (do_spinup)then
         outDir_spinup = adjustl(trim(outdir_case))//"/"//adjustl(trim(outDir_spinup))

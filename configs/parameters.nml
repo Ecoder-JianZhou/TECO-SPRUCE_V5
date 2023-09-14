@@ -59,6 +59,11 @@
    f_S2P        = 0.2
    f_S2M        = 0.5
    f_P2M        = 0.45
+   ! add in plant growth process
+   hmax         = 24.19   ! m
+   hl0          = 0.00019  ! m2/kg C
+   LAIMAX0      = 8.    ! maybe the LAImax
+   la0          = 0.2
 /
 
 &nml_initial_values
