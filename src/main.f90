@@ -75,9 +75,11 @@ program TECO
     if(do_simu)then
         print *, "# Start to run simulation mode."
         call teco_simu(vegn)            ! run simulation
+#ifdef USE_NETCDF
         if(do_out_hr)  call write_outputs_nc(outDir_h, outVars_h, nHours, "hourly") 
         if(do_out_day) call write_outputs_nc(outDir_d, outVars_d, nDays,  "daily") 
         if(do_out_mon) call write_outputs_nc(outDir_m, outVars_m, nMonths,"monthly") 
+#endif
     elseif(do_spinup)then
         ! call init_spinup_variables()    ! initilize the spin-up variables
         ! call run_spinup()               ! run spin-up loops

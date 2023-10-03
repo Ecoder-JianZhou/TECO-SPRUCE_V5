@@ -1,5 +1,3 @@
-export LD_LIBRARY_PATH=/home/jz964/miniconda3/lib/:$LD_LIBRARY_PATH
-
 gfortran -g -fbacktrace -Wall -fcheck=all   \
     src/teco/datatypes.f90                  \
     src/teco/updateAndSummary.f90          \
@@ -14,7 +12,7 @@ gfortran -g -fbacktrace -Wall -fcheck=all   \
     `# src/tools/spinup.f90`                    \
     src/main.f90                            \
     -o run_teco                             \
-    -I/home/jz964/miniconda3/include -L/home/jz964/miniconda3/lib -lnetcdff -lnetcdf
+    -I/usr/include -L/usr/lib -lnetcdff 
 
 if find "src" -name "*.mod" -print -quit | grep -q '.*'; then
     rm src/*.mod

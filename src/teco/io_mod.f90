@@ -2,12 +2,15 @@
 
 module io_mod
     use datatypes
-    use netcdf
+#ifdef USE_NETCDF
+        use netcdf
+#endif
     implicit none
     CHARACTER(len=4) :: str_startyr, str_endyr
     
     contains
 
+#ifdef USE_NETCDF
     subroutine write_outputs_nc(out_path, outVars, nSimuLen, str_freq)
         ! Daily and monthly
         ! carbon flux (KgC m-2 s-1): gpp, npp, nppLeaf, nppWood, nppRoot, nppOther,
@@ -253,4 +256,5 @@ module io_mod
             write(*,*) trim(adjustl(nf90_strerror(istatus)))
         end if
     end subroutine check
+#endif
 end module io_mod

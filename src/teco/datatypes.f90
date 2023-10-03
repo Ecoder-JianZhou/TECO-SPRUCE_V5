@@ -882,7 +882,7 @@ contains
     subroutine get_forcingdata()
         implicit none
         integer STAT, COUNT
-        character(50) commts
+        character(150) commts
         ! define variable for each line
         integer :: tmp_yr, tmp_doy, tmp_h
         real    :: tmp_Ta, tmp_Ts,  tmp_rh, tmp_vpd, tmp_rain, tmp_ws 
@@ -894,7 +894,9 @@ contains
 
         COUNT = 0
         OPEN(1,FILE=climfile,status='old',ACTION='read',IOSTAT=STAT)
+        print *, "here ..1.. ", climfile
         read(1,'(a160)') commts
+        print *, "here .. "
         DO WHILE (.TRUE.)
             COUNT=COUNT+1
             READ(1,*,IOSTAT=STAT, end=993) tmp_yr, tmp_doy, tmp_h,   &
