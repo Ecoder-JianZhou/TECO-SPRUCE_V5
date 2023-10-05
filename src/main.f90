@@ -153,7 +153,7 @@ subroutine createNewCase()
     outDir_nc  = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_nc))
 #endif
     call CreateFolder(adjustl(trim(outDir_nc)))
-    outDir_csv = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_csv))
+    outDir_csv = adjustl(trim(outdir_case))//"/"//adjustl(trim(outDir_csv))
 #if defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64)
     outDir_csv = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_csv))
 #endif
