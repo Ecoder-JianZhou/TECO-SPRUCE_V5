@@ -80,6 +80,10 @@ program TECO
         if(do_out_day) call write_outputs_nc(outDir_d, outVars_d, nDays,  "daily") 
         if(do_out_mon) call write_outputs_nc(outDir_m, outVars_m, nMonths,"monthly") 
 #endif
+        if(do_out_hr)  call write_outputs_csv(outDir_csv, outVars_h, nHours, "hourly") 
+        if(do_out_day) call write_outputs_csv(outDir_csv, outVars_d, nDays,  "daily") 
+        if(do_out_mon) call write_outputs_csv(outDir_csv, outVars_m, nMonths,"monthly") 
+
     elseif(do_spinup)then
         ! call init_spinup_variables()    ! initilize the spin-up variables
         ! call run_spinup()               ! run spin-up loops
@@ -124,19 +128,35 @@ subroutine createNewCase()
     call CreateFolder(adjustl(trim(outdir)))
 
     ! update and create the output dir of case
-    outdir_case = adjustl(trim(outdir))//"/"//adjustl(trim(case_name))
+    outdir_case = adjustl(trim(outdir))//"\"//adjustl(trim(case_name))
     call CreateFolder(adjustl(trim(outdir_case)))
 
+    if (index(achar(1), 'W') == 1) then
+        print *, "This is Windows platform"
+    else
+        print *, "This is not Windows platform"
+    end if
+
+    ! Check if the platform is Windows
+#if defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64)
+  WRITE(*, *) 'Running on Windows.'
+#else
+  WRITE(*, *) 'Running on a non-Windows platform.'
+#endif
+
     ! update and create the output dir of each format outputs
-    outDir_nc  = adjustl(trim(outdir_case))//"/"//adjustl(trim(outDir_nc))
+    outDir_nc  = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_nc))
     call CreateFolder(adjustl(trim(outDir_nc)))
-    outDir_csv = adjustl(trim(outdir_case))//"/"//adjustl(trim(outDir_csv))
+    outDir_csv = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_csv))
     call CreateFolder(adjustl(trim(outDir_csv)))
+    print*, outDir_csv
 
     ! update and create the output for each time frequency of nc-format outputs
     if (do_out_hr) then
+#ifdef USE_NETCDF
         outDir_h = adjustl(trim(outdir_nc))//"/Hourly"
         call CreateFolder(adjustl(trim(outDir_h)))
+#endif
     endif
     if (do_out_day) then
         outDir_d = adjustl(trim(outdir_nc))//"/Daily"
@@ -187,8 +207,9 @@ subroutine CreateFolder(path_new)
     ! ----------------------------------------------------
     allocate(character(len=6+len(path_new)) :: cmdChar)
     cmdChar = "mkdir "//path_new
-    inquire( file=trim(path_new)//'/.', exist=dirExists )  ! Works with gfortran, but not ifort
+    inquire( file=trim(path_new)//'\.', exist=dirExists )  ! Works with gfortran, but not ifort
     ! inquire( directory=newDirPath, exist=dirExists )         ! Works with ifort, but not gfortran
+    print *, cmdChar
     if (.not. dirExists) call system(cmdChar)
     deallocate(cmdChar)
 end subroutine CreateFolder

@@ -894,7 +894,7 @@ contains
 
         COUNT = 0
         OPEN(1,FILE=climfile,status='old',ACTION='read',IOSTAT=STAT)
-        print *, "here ..1.. ", climfile
+        print *, "here ..1.. ", climfile, STAT
         read(1,'(a160)') commts
         print *, "here .. "
         DO WHILE (.TRUE.)
@@ -962,6 +962,7 @@ contains
             if(STAT .ne. 0) exit            ! until the end of the file
             count_lines = count_lines + 1   ! recording the count of the lines
         enddo
+        close(38)
         return
     end subroutine ReadLineNumFromFile
 

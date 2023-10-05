@@ -10,6 +10,39 @@ module io_mod
     
     contains
 
+    subroutine write_outputs_csv(out_path, outVars, nSimuLen, str_freq)
+        ! write the outputs to csv-format file
+        implicit none
+        character(*), intent(in) :: out_path, str_freq
+        type(outvars_data_type), intent(in) :: outVars
+        integer, intent(in) :: nSimuLen
+        integer :: ipft
+        ! ---------------------------------------------
+        character(256) :: output_file
+        integer :: unit, i
+        character(len=:), allocatable :: csv_fileName
+        
+        allocate(character(len=200+len(out_path)) :: csv_fileName)
+        csv_fileName = adjustl(trim(out_path))//"\simulation_"//str_freq//"_TECO-SPRUCE_"//&
+            & adjustl(trim(case_name))//".csv" 
+
+        print*, csv_fileName
+        ! Open the file for writing
+        open(newunit=unit, file=csv_fileName, status='replace', action='write', iostat=i)
+
+        ! Write header line
+        write(unit, '(A,A,A)') 'Name', ',', 'Age'
+
+        ! Write data lines
+        do i = 1, 3
+            write(unit, '(A,I0,A,I0)') 'Person', i, ',', 25 + i*5
+        end do
+
+        ! Close the file
+        close(unit)
+        deallocate(csv_fileName)
+    end subroutine write_outputs_csv
+
 #ifdef USE_NETCDF
     subroutine write_outputs_nc(out_path, outVars, nSimuLen, str_freq)
         ! Daily and monthly

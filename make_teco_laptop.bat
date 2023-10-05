@@ -1,4 +1,4 @@
-gfortran -g -fbacktrace -Wall -fcheck=all  -cpp ^
+gfortran -g -fbacktrace -Wall -fcheck=all  -cpp -D_WIN64^
     src/teco/datatypes.f90                  ^
     src/teco/updateAndSummary.f90          ^
     src/teco/io_mod.f90            ^

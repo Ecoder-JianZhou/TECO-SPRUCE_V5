@@ -233,13 +233,13 @@ module transfer
                                             vegn%allSp(ipft)%QC(3)/vegn%allSp(ipft)%CN(3),0.2*vegn%allSp(ipft)%NSN),0.)
             vegn%allSp(ipft)%NSN    = vegn%allSp(ipft)%NSN- &
                                       (vegn%allSp(ipft)%N_leaf+vegn%allSp(ipft)%N_wood+vegn%allSp(ipft)%N_root)
-            print *, "NSN1", vegn%allSp(ipft)%NSN, vegn%allSp(ipft)%N_transfer, vegn%allSp(ipft)%N_uptake, &
-            vegn%allSp(ipft)%N_fixation
-            print *, "NSN2", vegn%allSp(ipft)%N_leaf, vegn%allSp(ipft)%N_wood, vegn%allSp(ipft)%N_root
-            print *, "NSN3", vegn%allSp(ipft)%OutN(1), vegn%allSp(ipft)%OutN(2), vegn%allSp(ipft)%OutN(3), vegn%allSp(ipft)%alphaN
-            print *, "NSN4", N_demand + vegn%allSp(ipft)%N_deficit,  N_demand, vegn%allSp(ipft)%N_deficit,  &
-            &     st%QNminer, vegn%allSp(ipft)%QC(3), (vegn%allSp(ipft)%QC(3)),Qroot0,  &
-            &     Nup0, vegn%allSp(ipft)%NSC, (ksye/st%QNminer), ksye, st%QNminer
+            ! print *, "NSN1", vegn%allSp(ipft)%NSN, vegn%allSp(ipft)%N_transfer, vegn%allSp(ipft)%N_uptake, &
+            ! vegn%allSp(ipft)%N_fixation
+            ! print *, "NSN2", vegn%allSp(ipft)%N_leaf, vegn%allSp(ipft)%N_wood, vegn%allSp(ipft)%N_root
+            ! print *, "NSN3", vegn%allSp(ipft)%OutN(1), vegn%allSp(ipft)%OutN(2), vegn%allSp(ipft)%OutN(3), vegn%allSp(ipft)%alphaN
+            ! print *, "NSN4", N_demand + vegn%allSp(ipft)%N_deficit,  N_demand, vegn%allSp(ipft)%N_deficit,  &
+            ! &     st%QNminer, vegn%allSp(ipft)%QC(3), (vegn%allSp(ipft)%QC(3)),Qroot0,  &
+            ! &     Nup0, vegn%allSp(ipft)%NSC, (ksye/st%QNminer), ksye, st%QNminer
             if(vegn%allSp(ipft)%NSN < 0.) stop
 
             ! N_LF   = OutN(1)*(1.-alphaN)

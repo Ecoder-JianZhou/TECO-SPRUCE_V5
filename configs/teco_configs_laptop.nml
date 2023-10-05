@@ -19,8 +19,8 @@
 
     dtimes  = 24               ! 24: hourly simulation
     ! set the input and output path and files
-    inDir             = "C:/Users/ecode/Documents/MyDocs/1_SPRUCE_cases/1_data_assimilation/inputs"
-    outDir            = "C:/Users/ecode/Documents/MyDocs/1_SPRUCE_cases/1_data_assimilation/outputs"
+    inDir             = "C:\Users\ecode\Documents\MyDocs\1_SPRUCE_cases\1_data_assimilation\inputs"
+    outDir            = "C:\Users\ecode\Documents\MyDocs\1_SPRUCE_cases\1_data_assimilation\outputs"
     ! input files
     climfile          = "SPRUCE_forcing.txt"
     watertablefile    = "watertablefile.txt"

@@ -224,9 +224,9 @@ module vegetation
       GrowthS = MAX(0.0, GrowthP - (GrowthL + GrowthR))                        ! *c2/(1.+c1+c2)
 
       spec%npp    = GrowthL + GrowthR + GrowthS + spec%add       ! Modified by Jiang Jiang 2015/10/13
-      write(*,*) "test: NPP1 ", spec%npp, GrowthL, GrowthR, GrowthS, spec%add
-      write(*,*) "test: NPP2 ", GPmax*spec%fnsc*scalT*(1.-exp(-spec%NSN)),0.004*spec%NSC,0.004*spec%NSN*CNp0
-      write(*,*) "test: NPP3 ", GPmax,spec%fnsc,scalT,spec%NSN,spec%NSC,CNp0
+      ! write(*,*) "test: NPP1 ", spec%npp, GrowthL, GrowthR, GrowthS, spec%add
+      ! write(*,*) "test: NPP2 ", GPmax*spec%fnsc*scalT*(1.-exp(-spec%NSN)),0.004*spec%NSC,0.004*spec%NSN*CNp0
+      ! write(*,*) "test: NPP3 ", GPmax,spec%fnsc,scalT,spec%NSN,spec%NSC,CNp0
       addaccu     = addaccu + spec%add
       GrowthLaccu = GrowthLaccu + GrowthL
       GrowthRaccu = GrowthRaccu + GrowthR
