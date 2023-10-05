@@ -148,11 +148,13 @@ subroutine createNewCase()
 ! #endif
 
     ! update and create the output dir of each format outputs
-    outDir_nc  = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_nc))
+#ifdef USE_NETCDF
+    outDir_nc  = adjustl(trim(outdir_case))//"/"//adjustl(trim(outDir_nc))
 #if defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64)
     outDir_nc  = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_nc))
 #endif
     call CreateFolder(adjustl(trim(outDir_nc)))
+#endif
     outDir_csv = adjustl(trim(outdir_case))//"/"//adjustl(trim(outDir_csv))
 #if defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64)
     outDir_csv = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_csv))

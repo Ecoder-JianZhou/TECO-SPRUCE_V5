@@ -300,6 +300,9 @@ module datatypes
 
     ! total outputs
     type outvars_data_type
+        integer, allocatable :: year(:)
+        integer, allocatable :: doy(:)
+        integer, allocatable :: hour(:)
         type(spec_outvars_type), allocatable :: allSpec(:)
         ! carbon fluxes (Kg C m-2 s-1)
         real, allocatable :: gpp(:)
@@ -372,7 +375,7 @@ module datatypes
         real, allocatable :: lai(:)                     ! m2 m-2, Leaf area index 
     end type outvars_data_type
     type(outvars_data_type) :: outVars_h, outVars_d, outVars_m, outVars_y
-    type(outvars_data_type) :: tot_outVars_h, tot_outVars_d, tot_outVars_m, tot_outVars_y
+    ! type(outvars_data_type) :: tot_outVars_h, tot_outVars_d, tot_outVars_m, tot_outVars_y
 
     ! parameters from the namelist file
     type nml_params_data_type
@@ -972,6 +975,9 @@ contains
         type(outvars_data_type), intent(inout) :: outVars
         integer :: ipft
         ! assign the species outVars 
+        allocate(outVars%year(ntime))
+        allocate(outVars%doy(ntime))
+        allocate(outVars%hour(ntime))
         allocate(outVars%allSpec(npft))
         do ipft = 1, npft
             allocate(outVars%allSpec(ipft)%gpp(ntime))
@@ -1120,6 +1126,9 @@ contains
         integer, intent(in) :: itime
         type(outvars_data_type), intent(inout) :: outVars
         integer :: npft, ipft
+        outVars%year = 0
+        outVars%doy  = 0
+        outVars%hour = 0
         if (allocated(outVars%allSpec))then
             npft = size(outVars%allSpec)
             do ipft = 1, npft
@@ -1228,6 +1237,9 @@ contains
         implicit none
         type(outvars_data_type), intent(inout) :: outVars
         integer :: ipft, npft
+        if(allocated(outVars%year)) deallocate(outVars%year)
+        if(allocated(outVars%doy))  deallocate(outVars%doy)
+        if(allocated(outVars%hour)) deallocate(outVars%hour)
         if (allocated(outVars%allSpec))then
             npft = size(outVars%allSpec)
             do ipft = 1, npft

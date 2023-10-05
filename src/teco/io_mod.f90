@@ -19,26 +19,118 @@ module io_mod
         integer :: ipft
         ! ---------------------------------------------
         character(256) :: output_file
-        integer :: unit, i
+        integer :: unit, i, isimulen, nformat
         character(len=:), allocatable :: csv_fileName
-        
+        character(1500) :: header_csv
+        character(len=5000) :: format_string
+        print*,"test0..."
         allocate(character(len=200+len(out_path)) :: csv_fileName)
-        csv_fileName = adjustl(trim(out_path))//"\simulation_"//str_freq//"_TECO-SPRUCE_"//&
-            & adjustl(trim(case_name))//".csv" 
 
-        print*, csv_fileName
+        csv_fileName = adjustl(trim(out_path))//"/simulation_"//str_freq//"_TECO-SPRUCE_"//&
+            & adjustl(trim(case_name))//".csv" 
+#if defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64)
+        csv_fileName = adjustl(trim(out_path))//"\simulation_"//str_freq//"_TECO-SPRUCE_"//&
+            & adjustl(trim(case_name))//".csv"
+#endif
         ! Open the file for writing
         open(newunit=unit, file=csv_fileName, status='replace', action='write', iostat=i)
 
         ! Write header line
-        write(unit, '(A,A,A)') 'Name', ',', 'Age'
+        ! write(unit, *) 'Name', ',', 'Age'
+        header_csv = "year,doy,hour,"
+        do ipft = 1, count_pft
+            header_csv = adjustl(trim(header_csv))//"gpp_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"nee_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"npp_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"nppLeaf_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"nppWood_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"nppStem_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"nppRoot_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"nppOther_"//adjustl(trim(spec_names(ipft)))//","    ! According to SPRUCE-MIP, stem means above ground woody tissues which is different from wood tissues.
+            header_csv = adjustl(trim(header_csv))//"ra_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"raLeaf_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"raStem_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"raRoot_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"raOther_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"rMaint_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"rGrowth_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"nbp_"//adjustl(trim(spec_names(ipft)))//","
+            ! Carbon Pools  (KgC m-2)
+            header_csv = adjustl(trim(header_csv))//"cLeaf_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"cStem_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"cRoot_"//adjustl(trim(spec_names(ipft)))//","
+            ! Nitrogen pools (kgN m-2)
+            header_csv = adjustl(trim(header_csv))//"nLeaf_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"nStem_"//adjustl(trim(spec_names(ipft)))//","
+            header_csv = adjustl(trim(header_csv))//"nRoot_"//adjustl(trim(spec_names(ipft)))//","
+            ! water fluxes (kg m-2 s-1)
+            header_csv = adjustl(trim(header_csv))//"tran_"//adjustl(trim(spec_names(ipft)))//","
+            ! other
+            header_csv = adjustl(trim(header_csv))//"lai_"//adjustl(trim(spec_names(ipft)))//"," 
+        enddo
+        header_csv = adjustl(trim(header_csv))//"gpp,nee,npp,nppLeaf,nppWood,nppStem,nppRoot,nppOther,ra,&
+            raLeaf,raStem,raRoot,raOther,rMaint,rGrowth,rh,nbp,wetlandCH4,wetlandCH4prod,&
+            wetlandCH4cons,cLeaf,cStem,cRoot,cOther,cLitter,cLitterCwd,cSoil,&
+            cSoilLevels_1,cSoilLevels_2,cSoilLevels_3,cSoilLevels_4,cSoilLevels_5,&
+            cSoilLevels_6,cSoilLevels_7,cSoilLevels_8,cSoilLevels_9,cSoilLevels_10,&
+            cSoilFast,cSoilSlow,cSoilPassive,CH4_1,CH4_2,CH4_3,CH4_4,CH4_5,CH4_6,CH4_7,&
+            CH4_8,CH4_9,CH4_10,fBNF,fN2O,fNloss,fNnetmin,fNdep,nLeaf,nStem,nRoot,nOther,&
+            nLitter,nLitterCwd,nSoil,nMineral,hfls,hfss,SWnet,LWnet,ec,tran,es,hfsbl,&
+            mrro,mrros,mrrob,mrso_1,mrso_2,mrso_3,mrso_4,mrso_5,mrso_6,mrso_7,mrso_8,&
+            mrso_9,mrso_10,tsl_1,tsl_2,tsl_3,tsl_4,tsl_5,tsl_6,tsl_7,tsl_8,tsl_9,tsl_10,&
+            &tsland,wtd,snd,lai"
+        write(unit, *) adjustl(trim(header_csv))
+        ! write the date
+        nformat = 24*count_pft+98 
+        print*,"test1..."
+        format_string = '((i4,",")(i3,",")(i2,",")' // repeat('(f15.4, ",")', nformat-1) // 'f15.4)'
+        print*,format_string
+        do i = 1, nSimuLen
+            write(unit, adjustl(trim(format_string)))outVars%year(i), outVars%doy(i), outVars%hour(i), &
+               (outVars%allSpec(ipft)%gpp(i),      outVars%allSpec(ipft)%nee(i),      outVars%allSpec(ipft)%npp(i),     &     
+                outVars%allSpec(ipft)%nppLeaf(i),  outVars%allSpec(ipft)%nppWood(i),  outVars%allSpec(ipft)%nppStem(i), &
+                outVars%allSpec(ipft)%nppRoot(i),  outVars%allSpec(ipft)%nppOther(i), outVars%allSpec(ipft)%ra(i),      & 
+                outVars%allSpec(ipft)%raLeaf(i),   outVars%allSpec(ipft)%raStem(i),   outVars%allSpec(ipft)%raRoot(i),  & 
+                outVars%allSpec(ipft)%raOther(i),  outVars%allSpec(ipft)%rMaint(i),   outVars%allSpec(ipft)%rGrowth(i), &
+                outVars%allSpec(ipft)%nbp(i),      outVars%allSpec(ipft)%cLeaf(i),    outVars%allSpec(ipft)%cStem(i),   & 
+                outVars%allSpec(ipft)%cRoot(i),    outVars%allSpec(ipft)%nLeaf(i),    outVars%allSpec(ipft)%nStem(i),   &  
+                outVars%allSpec(ipft)%nRoot(i),    outVars%allSpec(ipft)%tran(i),     outVars%allSpec(ipft)%lai(i),     &    
+                ipft = 1, count_pft),& 
+                outVars%gpp(i),     outVars%nee(i),        outVars%npp(i),            outVars%nppLeaf(i),  &        
+                outVars%nppWood(i), outVars%nppStem(i),    outVars%nppRoot(i),        outVars%nppOther(i), &   
+                outVars%ra(i),      outVars%raLeaf(i),     outVars%raStem(i),         outVars%raRoot(i),   &  
+                outVars%raOther(i), outVars%rMaint(i),     outVars%rGrowth(i),        outVars%rh(i),       &
+                outVars%nbp(i),&     
+                outVars%wetlandCH4(i), outVars%wetlandCH4prod(i), outVars%wetlandCH4cons(i),   &
+                outVars%cLeaf(i),   outVars%cStem(i),      outVars%cRoot(i),          outVars%cOther(i),   &
+                outVars%cLitter(i), outVars%cLitterCwd(i), outVars%cSoil(i),                  &
+                outVars%cSoilLevels(i,1), outVars%cSoilLevels(i,2), outVars%cSoilLevels(i,3), & 
+                outVars%cSoilLevels(i,4), outVars%cSoilLevels(i,5), outVars%cSoilLevels(i,6), &
+                outVars%cSoilLevels(i,7), outVars%cSoilLevels(i,8), outVars%cSoilLevels(i,9), & 
+                outVars%cSoilLevels(i,10),                                                    &
+                outVars%cSoilFast(i),  outVars%cSoilSlow(i), outVars%cSoilPassive(i),            &
+                outVars%CH4(i,1),      outVars%CH4(i,2),     outVars%CH4(i,3), outVars%CH4(i,4), &
+                outVars%CH4(i,5),      outVars%CH4(i,6),     outVars%CH4(i,7), outVars%CH4(i,8), &
+                outVars%CH4(i,9),      outVars%CH4(i,10), &
+                outVars%fBNF(i),        outVars%fN2O(i),   outVars%fNloss(i),   outVars%fNnetmin(i),   outVars%fNdep(i),   &
+                outVars%nLeaf(i),      outVars%nStem(i),  outVars%nRoot(i),    outVars%nOther(i),     outVars%nLitter(i), &
+                outVars%nLitterCwd(i), outVars%nSoil(i),  outVars%nMineral(i), outVars%hfls(i),       outVars%hfss(i),    &
+                outVars%SWnet(i),      outVars%LWnet(i),  outVars%ec(i),       outVars%tran(i),       outVars%es(i),      &
+                outVars%hfsbl(i),      outVars%mrro(i),   outVars%mrros(i),    outVars%mrrob(i),      outVars%mrso(i,1),  &
+                outVars%mrso(i,2),     outVars%mrso(i,3), outVars%mrso(i,4),   outVars%mrso(i,5),     outVars%mrso(i,6),  &
+                outVars%mrso(i,7),     outVars%mrso(i,8), outVars%mrso(i,9),   outVars%mrso(i,10), &
+                outVars%tsl(i,1),      outVars%tsl(i,2),  outVars%tsl(i,3),    outVars%tsl(i,4),      outVars%tsl(i,5), &
+                outVars%tsl(i,6),      outVars%tsl(i,7),  outVars%tsl(i,8),    outVars%tsl(i,9),      outVars%tsl(i,10),&
+                outVars%tsland(i),     outVars%wtd(i),    outVars%snd(i),      outVars%lai(i)
+        enddo
+        
+! 83      format((i4),",",(i3),",",(i2),",",(f15.4,","))
+        ! ! Write data lines
+        ! do i = 1, 3
+        !     write(unit, '(A,I0,A,I0)') 'Person', i, ',', 25 + i*5
+        ! end do
 
-        ! Write data lines
-        do i = 1, 3
-            write(unit, '(A,I0,A,I0)') 'Person', i, ',', 25 + i*5
-        end do
-
-        ! Close the file
+        ! ! Close the file
         close(unit)
         deallocate(csv_fileName)
     end subroutine write_outputs_csv

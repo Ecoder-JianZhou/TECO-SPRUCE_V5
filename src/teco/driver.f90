@@ -258,15 +258,15 @@ module driver
             st%NEE     = vegn%Rauto+st%Rhetero - vegn%GPP
             
 
-            call updateHourly(vegn, iclim)    ! hourly simulation
+            call updateHourly(vegn, iclim, iyear, iday, ihour)    ! hourly simulation
             ! print *, "test", vegn%allSp(1)%gpp, st%QC(4:8), vegn%LAI
             
             ! stop
-            call updateDaily(vegn, iTotDaily)
+            call updateDaily(vegn, iTotDaily, iyear, iday, ihour)
             ! write(*,*) outVars_d%cLeaf(iTotDaily), 24, iTotDaily, st%QC(1)
             ! print *, "outVar: ", outVars_d%gpp, outVars_h%gpp
-            call updateMonthly(vegn, iTotMonthly, hoursOfmonth)
-            call updateYearly(vegn, iyear, hoursOfYear)
+            call updateMonthly(vegn, iTotMonthly, hoursOfmonth, iyear, iday, ihour)
+            call updateYearly(vegn, iyear, hoursOfYear, iyear, iday, ihour)
             call init_hourly(iclim)
             if (ihour .eq. 23) then
                 ! call init_daily()

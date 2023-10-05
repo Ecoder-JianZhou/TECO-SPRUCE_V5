@@ -5,43 +5,45 @@ module update_and_summary
     real convert_g2kg, convert_h2s
 
     contains
-    subroutine updateHourly(vegn, itime)
+    subroutine updateHourly(vegn, itime, iyear, iday, ihour)
         implicit none
-        integer, intent(in) :: itime
+        integer, intent(in) :: itime, iyear, iday, ihour
         type(vegn_tile_type), intent(inout) :: vegn
-        if (do_out_hr) call updateOutVars(itime, 0, vegn, outVars_h)
+        if (do_out_hr) call updateOutVars(itime, 0, vegn, outVars_h, iyear, iday, ihour)
     end subroutine updateHourly
 
-    subroutine updateDaily(vegn, itime)
+    subroutine updateDaily(vegn, itime, iyear, iday, ihour)
         implicit none
-        integer, intent(in) :: itime
+        integer, intent(in) :: itime, iyear, iday, ihour
         type(vegn_tile_type), intent(inout) :: vegn
-        if (do_out_day) call updateOutVars(itime, 24, vegn, outVars_d)
+        if (do_out_day) call updateOutVars(itime, 24, vegn, outVars_d, iyear, iday, ihour)
         ! write(*,*) outVars_d%cLeaf(itime), 24, itime, st%QC(1)
     end subroutine updateDaily
 
-    subroutine updateMonthly(vegn, itime, hoursOfmonth)
+    subroutine updateMonthly(vegn, itime, hoursOfmonth, iyear, iday, ihour)
         implicit none
-        integer, intent(in) :: itime, hoursOfmonth
+        integer, intent(in) :: itime, hoursOfmonth, iyear, iday, ihour
         type(vegn_tile_type), intent(inout) :: vegn
-        if (do_out_mon) call updateOutVars(itime, hoursOfmonth, vegn, outVars_m)
+        if (do_out_mon) call updateOutVars(itime, hoursOfmonth, vegn, outVars_m, iyear, iday, ihour)
     end subroutine updateMonthly
 
-    subroutine updateYearly(vegn, itime, hoursOfYear)
+    subroutine updateYearly(vegn, itime, hoursOfYear, iyear, iday, ihour)
         implicit none
-        integer, intent(in) :: itime, hoursOfYear
+        integer, intent(in) :: itime, hoursOfYear, iyear, iday, ihour
         type(vegn_tile_type), intent(inout) :: vegn
-        if(do_out_yr) call updateOutVars(itime, hoursOfYear, vegn, outVars_y)
+        if(do_out_yr) call updateOutVars(itime, hoursOfYear, vegn, outVars_y, iyear, iday, ihour)
     end subroutine updateYearly
 
-    subroutine updateOutVars(itime, ntime, vegn, outvars)
+    subroutine updateOutVars(itime, ntime, vegn, outvars, iyear, iday, ihour)
         implicit none
-        integer, intent(in) :: itime, ntime
+        integer, intent(in) :: itime, ntime, iyear, iday, ihour
         type(outvars_data_type), intent(inout) :: outVars
         type(vegn_tile_type), intent(in) :: vegn
         integer :: ipft, npft
         ! integer iTotHourly
-        
+        outVars%year(itime) = iyear
+        outVars%doy(itime)  = iday
+        outVars%hour(itime) = ihour
         ! stop
         convert_g2kg = 0.001
         convert_h2s  = 1/3600.
