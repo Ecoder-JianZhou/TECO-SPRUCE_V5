@@ -128,26 +128,35 @@ subroutine createNewCase()
     call CreateFolder(adjustl(trim(outdir)))
 
     ! update and create the output dir of case
+    outdir_case = adjustl(trim(outdir))//"/"//adjustl(trim(case_name))
+#if defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64)
     outdir_case = adjustl(trim(outdir))//"\"//adjustl(trim(case_name))
+#endif
     call CreateFolder(adjustl(trim(outdir_case)))
 
-    if (index(achar(1), 'W') == 1) then
-        print *, "This is Windows platform"
-    else
-        print *, "This is not Windows platform"
-    end if
+    ! if (index(achar(1), 'W') == 1) then
+    !     print *, "This is Windows platform"
+    ! else
+    !     print *, "This is not Windows platform"
+    ! end if
 
     ! Check if the platform is Windows
-#if defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64)
-  WRITE(*, *) 'Running on Windows.'
-#else
-  WRITE(*, *) 'Running on a non-Windows platform.'
-#endif
+! #if defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64)
+!   WRITE(*, *) 'Running on Windows.'
+! #else
+!   WRITE(*, *) 'Running on a non-Windows platform.'
+! #endif
 
     ! update and create the output dir of each format outputs
     outDir_nc  = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_nc))
+#if defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64)
+    outDir_nc  = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_nc))
+#endif
     call CreateFolder(adjustl(trim(outDir_nc)))
     outDir_csv = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_csv))
+#if defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64)
+    outDir_csv = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_csv))
+#endif
     call CreateFolder(adjustl(trim(outDir_csv)))
     print*, outDir_csv
 
@@ -230,3 +239,16 @@ subroutine check_inputfile(filepath, whatfile)
         stop
     end if
 end subroutine check_inputfile
+
+function replace_slash(s) result(r)
+    character(len=*), intent(in) :: s
+    character(len=len(s)) :: r
+    integer :: i
+    do i = 1, len(s)
+      if (s(i:i) == "/") then
+        r(i:i) = "\"
+      else
+        r(i:i) = s(i:i)
+      end if
+    end do
+  end function replace_slash
