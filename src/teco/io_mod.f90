@@ -32,9 +32,6 @@ module io_mod
         csv_fileName = adjustl(trim(out_path))//"\simulation_"//str_freq//"_TECO-SPRUCE_"//&
             & adjustl(trim(case_name))//".csv"
 #endif
-        ! Open the file for writing
-        open(newunit=unit, file=csv_fileName, status='replace', action='write', iostat=i)
-
         ! Write header line
         ! write(unit, *) 'Name', ',', 'Age'
         header_csv = "year,doy,hour,"
@@ -79,6 +76,8 @@ module io_mod
             mrro,mrros,mrrob,mrso_1,mrso_2,mrso_3,mrso_4,mrso_5,mrso_6,mrso_7,mrso_8,&
             mrso_9,mrso_10,tsl_1,tsl_2,tsl_3,tsl_4,tsl_5,tsl_6,tsl_7,tsl_8,tsl_9,tsl_10,&
             &tsland,wtd,snd,lai"
+        ! Open the file for writing
+        open(newunit=unit, file=csv_fileName, status='replace', action='write', iostat=i)
         write(unit, *) adjustl(trim(header_csv))
         ! write the date
         nformat = 24*count_pft+98 
