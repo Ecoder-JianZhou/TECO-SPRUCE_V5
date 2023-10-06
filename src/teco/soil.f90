@@ -349,11 +349,12 @@ module soil
         if (ABS(sftmp_pre -st%sftmp) .gt. 20. ) st%sftmp=sftmp_pre  
         tsoill_0  = st%sftmp
         if (isnan(st%Rsoilabs)) then
-            ! write(*,*) "Rsoilabs is NAN: ", albedo_snow, Rsoilab1, Rsoilab2, Rsoilab3
+            write(*,*) "Rsoilabs is NAN: ", st%albedo_snow, st%Rsoilab1, st%Rsoilab2, st%Rsoilab3
         endif
 
         if(isnan(st%sftmp)) then
-            write(*,*)"test sftmp: ", st%sftmp, delta, sftmp_pre, resdh, drsdh, st%Rsoilabs, st%Hsoil, st%Esoil, st%G
+            write(*,*)"test sftmp: ", st%sftmp, delta, sftmp_pre, resdh, drsdh, st%Rsoilabs, st%Hsoil, st%Esoil, st%G, &
+            resht_lai, DNR, DSH, DGH, DLE
             stop
         endif
         do i=1,10

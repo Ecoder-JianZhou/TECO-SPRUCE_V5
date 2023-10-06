@@ -21,8 +21,8 @@ module io_mod
         character(256) :: output_file
         integer :: unit, i, isimulen, nformat
         character(len=:), allocatable :: csv_fileName
-        character(1500) :: header_csv
-        character(len=5000) :: format_string
+        character(2000) :: header_csv
+        character(len=2500) :: format_string
         print*,"test0..."
         allocate(character(len=200+len(out_path)) :: csv_fileName)
 
@@ -76,6 +76,7 @@ module io_mod
             mrro,mrros,mrrob,mrso_1,mrso_2,mrso_3,mrso_4,mrso_5,mrso_6,mrso_7,mrso_8,&
             mrso_9,mrso_10,tsl_1,tsl_2,tsl_3,tsl_4,tsl_5,tsl_6,tsl_7,tsl_8,tsl_9,tsl_10,&
             &tsland,wtd,snd,lai"
+        print*, header_csv
         ! Open the file for writing
         open(newunit=unit, file=csv_fileName, status='replace', action='write', iostat=i)
         write(unit, *) adjustl(trim(header_csv))
@@ -83,7 +84,8 @@ module io_mod
         nformat = 24*count_pft+98 
         print*,"test1..."
         format_string = '((i4,",")(i3,",")(i2,",")' // repeat('(f15.4, ",")', nformat-1) // 'f15.4)'
-        print*,format_string
+        ! print*,format_string
+        ! print*, outVars%allSpec(1)%gpp
         do i = 1, nSimuLen
             write(unit, adjustl(trim(format_string)))outVars%year(i), outVars%doy(i), outVars%hour(i), &
                (outVars%allSpec(ipft)%gpp(i),      outVars%allSpec(ipft)%nee(i),      outVars%allSpec(ipft)%npp(i),     &     

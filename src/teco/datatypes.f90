@@ -292,6 +292,7 @@ module datatypes
         real, allocatable :: nLeaf(:)
         real, allocatable :: nStem(:)
         real, allocatable :: nRoot(:)
+        ! real, allocatable :: nOther(:)
         ! water fluxes (kg m-2 s-1)
         real, allocatable :: tran(:)
         ! other
@@ -880,6 +881,7 @@ contains
         spec%hl0     = in_params%hl0             ! in plant growth hl0  = 0.00019  ! m2/kg C
         spec%LAIMAX0 = in_params%LAIMAX0        ! in plant growth LAIMAX0 = 8.    ! maybe the LAImax
         spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
+        return
     end subroutine initilize_spec
 
     subroutine get_forcingdata()
@@ -1126,9 +1128,9 @@ contains
         integer, intent(in) :: itime
         type(outvars_data_type), intent(inout) :: outVars
         integer :: npft, ipft
-        outVars%year = 0
-        outVars%doy  = 0
-        outVars%hour = 0
+        outVars%year(itime) = 0
+        outVars%doy(itime)  = 0
+        outVars%hour(itime) = 0
         if (allocated(outVars%allSpec))then
             npft = size(outVars%allSpec)
             do ipft = 1, npft

@@ -65,6 +65,7 @@ module vegetation
       enddo 
       if (do_soilphy) call Tsoil_simu(vegn, iforcing) ! Jian: need modify
       st%evap   = AMAX1(st%Esoil *3600.0/(1.0e6*(2.501 - 0.00236*iforcing%Tair)), 0.)  ! Jian: need modify
+      return
    end subroutine vegn_canopy
 
    ! -------- autotrophic respiration -----------------------------------------------------------------
@@ -127,9 +128,9 @@ module vegetation
       
       do ipft = 1, vegn%npft
          call plantgrowth(vegn%allSp(ipft), iforcing)
-         ! if (ipft .eq. 1)then
-            
+         ! if (ipft .eq. 1)then   
       enddo
+      return
    end subroutine vegn_plantgrowth
 
    subroutine plantgrowth(spec, iforcing)
@@ -224,15 +225,15 @@ module vegetation
       GrowthS = MAX(0.0, GrowthP - (GrowthL + GrowthR))                        ! *c2/(1.+c1+c2)
 
       spec%npp    = GrowthL + GrowthR + GrowthS + spec%add       ! Modified by Jiang Jiang 2015/10/13
-      ! write(*,*) "test: NPP1 ", spec%npp, GrowthL, GrowthR, GrowthS, spec%add
-      ! write(*,*) "test: NPP2 ", GPmax*spec%fnsc*scalT*(1.-exp(-spec%NSN)),0.004*spec%NSC,0.004*spec%NSN*CNp0
-      ! write(*,*) "test: NPP3 ", GPmax,spec%fnsc,scalT,spec%NSN,spec%NSC,CNp0
+      write(*,*) "test: NPP1 ", spec%npp, GrowthL, GrowthR, GrowthS, spec%add, spec%stor_use, spec%accumulation
+      write(*,*) "test: NPP2 ", GPmax*spec%fnsc*scalT*(1.-exp(-spec%NSN)),0.004*spec%NSC,0.004*spec%NSN*CNp0
+      write(*,*) "test: NPP3 ", GPmax,spec%fnsc,scalT,spec%NSN,spec%NSC,CNp0
       addaccu     = addaccu + spec%add
       GrowthLaccu = GrowthLaccu + GrowthL
       GrowthRaccu = GrowthRaccu + GrowthR
       GrowthSaccu = GrowthSaccu + GrowthS
       
-      if (spec%npp .eq. 0.0) then
+      if (spec%npp .lt. 1E-18) then
          spec%alpha_L = 0.333
          spec%alpha_W = 0.333
          spec%alpha_R = 0.333
@@ -274,7 +275,7 @@ module vegetation
          gamma_T = 0.
          gamma_N = 0.
       end if
-      ! print *, "L_fall: ", spec%bmleaf, 0.48*gamma_N, spec%tauC(1), st%scalW
+      print *, "L_fall: ", spec%bmleaf, 0.48*gamma_N, spec%tauC(1), st%scalW
       spec%L_fall = spec%bmleaf*0.48*gamma_N     ! L_fall=bmleaf*0.48*AMIN1((gamma_T+gamma_N),0.99)
       return
    end subroutine plantgrowth
@@ -448,6 +449,8 @@ module vegetation
          windUx = wind*exp(- st%extkU*flai)     ! windspeed at depth xi
          scalex = exp(-extkn*flai)              ! scale Vcmx0 & Jmax0
          Vcmxx  = spec%Vcmx0*scalex             ! Vcmx0 ---> Vcmax0
+         print*, "vcmx0: ",Vcmxx, spec%Vcmx0, scalex, extkn, flai, gaussx(ng), flait,transd,spec%LAI, &
+         spec%bmleaf, spec%SLA, spec%QC(1)
          eJmxx  = spec%eJmx0*scalex
          if (radabv(1) .ge. 10.0) then                          !check solar Radiation > 10 W/m2
             ! leaf stomata-photosynthesis-transpiration model - daytime
@@ -842,6 +845,7 @@ module vegetation
             gsc = gsc0
             ! choose smaller of Ac, Aq
             if (ISNAN(Aleafx)) then
+               print*, "Aleafx is nan", Aleafx, Vcmxx, Tlk
                stop
             endif
             Aleaf(ileaf) = Aleafx                     !mol CO2/m2/s

@@ -80,6 +80,7 @@ program TECO
         if(do_out_day) call write_outputs_nc(outDir_d, outVars_d, nDays,  "daily") 
         if(do_out_mon) call write_outputs_nc(outDir_m, outVars_m, nMonths,"monthly") 
 #endif
+        ! print*, outvars_d%allSpec(1)%gpp
         if(do_out_hr)  call write_outputs_csv(outDir_csv, outVars_h, nHours, "hourly") 
         if(do_out_day) call write_outputs_csv(outDir_csv, outVars_d, nDays,  "daily") 
         if(do_out_mon) call write_outputs_csv(outDir_csv, outVars_m, nMonths,"monthly") 

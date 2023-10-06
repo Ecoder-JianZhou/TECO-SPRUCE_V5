@@ -45,8 +45,8 @@ module update_and_summary
         outVars%doy(itime)  = iday
         outVars%hour(itime) = ihour
         ! stop
-        convert_g2kg = 0.001
-        convert_h2s  = 1/3600.
+        convert_g2kg = 1 !0.001
+        convert_h2s  = 1!1/3600.
         if (allocated(outvars%allSpec)) then
             npft = size(outvars%allSpec)
             do ipft = 1, npft
@@ -54,9 +54,10 @@ module update_and_summary
                 outvars%allSpec(ipft)%gpp(itime)      = outvars%allSpec(ipft)%gpp(itime)     + &
                                                           vegn%allSp(ipft)%gpp*convert_g2kg*convert_h2s/ntime
                 if (outvars%allSpec(ipft)%gpp(itime) > 100 .or. outvars%allSpec(ipft)%gpp(itime) < 0.) then
-                    print *, outvars%allSpec(ipft)%gpp(itime), vegn%allSp(ipft)%gpp*convert_g2kg*convert_h2s/ntime
+                    print *, "test gpp: ", outvars%allSpec(ipft)%gpp(itime), vegn%allSp(ipft)%gpp*convert_g2kg*convert_h2s/ntime
                     stop
                 endif
+                ! if (vegn%allSp(ipft)%gpp>0) print*, "gpp > 0",  outvars%allSpec(ipft)%gpp(itime)
                 ! outvars%allSpec(ipft)%nee           = vegn%allSp(ipft)%NEE
                 outvars%allSpec(ipft)%npp(itime)      = outvars%allSpec(ipft)%npp(itime)     + &
                                                           vegn%allSp(ipft)%npp*convert_g2kg*convert_h2s/ntime
@@ -68,7 +69,8 @@ module update_and_summary
                                                           vegn%allSp(ipft)%NPP_W*convert_g2kg*convert_h2s/ntime
                 outvars%allSpec(ipft)%nppRoot(itime)  = outvars%allSpec(ipft)%nppRoot(itime) + &
                                                           vegn%allSp(ipft)%NPP_R*convert_g2kg*convert_h2s/ntime
-                ! outvars%allSpec(ipft)%nppOther      = vegn%allSp(ipft)%nppOther    ! According to SPRUCE-MIP, stem means above ground woody tissues which is different from wood tissues.
+                outvars%allSpec(ipft)%nppOther        = outvars%allSpec(ipft)%nppOther(itime) + &
+                                                          vegn%allSp(ipft)%NSC*convert_g2kg*convert_h2s/ntime    ! According to SPRUCE-MIP, stem means above ground woody tissues which is different from wood tissues.
                 outvars%allSpec(ipft)%ra(itime)       = outvars%allSpec(ipft)%ra(itime)      + &
                                                           vegn%allSp(ipft)%Rauto*convert_g2kg*convert_h2s/ntime
                 outvars%allSpec(ipft)%raLeaf(itime)   = outvars%allSpec(ipft)%raLeaf(itime)  + &
