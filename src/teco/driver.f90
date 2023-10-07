@@ -44,7 +44,7 @@ module driver
             iday  = forcing(iclim)%doy                    
             ihour = forcing(iclim)%hour
             ! if (iyear .eq. 2016 .and. iday .eq. 1) stop
-            if (iday .eq. 230) stop
+            ! if (iday .eq. 230) stop
             ! if it is a new year
             if ((iday .eq. 1) .and. (ihour .eq. 0)) call init_yearly(vegn, year0)
             if (do_simu .and. (iday .eq. 1) .and. (ihour .eq. 0)) write(*,*)iyear

@@ -873,6 +873,7 @@ contains
         spec%accumulation = init_params%accumulation
         spec%SNvcmax = init_params%SNvcmax
         spec%NSN     = init_params%NSN
+        spec%N_deficit = init_params%N_deficit
         spec%LAI     = spec%LAImin
         spec%bmleaf  = spec%QC(1)/0.48
         spec%bmstem  = spec%QC(2)/0.48
