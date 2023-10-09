@@ -53,10 +53,10 @@ module update_and_summary
                 ! carbon fluxes (Kg C m-2 s-1)
                 outvars%allSpec(ipft)%gpp(itime)      = outvars%allSpec(ipft)%gpp(itime)     + &
                                                           vegn%allSp(ipft)%gpp*convert_g2kg*convert_h2s/ntime
-                if (outvars%allSpec(ipft)%gpp(itime) > 100 .or. outvars%allSpec(ipft)%gpp(itime) < 0.) then
-                    print *, "test gpp: ", outvars%allSpec(ipft)%gpp(itime), vegn%allSp(ipft)%gpp*convert_g2kg*convert_h2s/ntime
-                    stop
-                endif
+                ! if (outvars%allSpec(ipft)%gpp(itime) > 100 .or. outvars%allSpec(ipft)%gpp(itime) < 0.) then
+                !     print *, "test gpp: ", outvars%allSpec(ipft)%gpp(itime), vegn%allSp(ipft)%gpp*convert_g2kg*convert_h2s/ntime
+                !     stop
+                ! endif
                 ! if (vegn%allSp(ipft)%gpp>0) print*, "gpp > 0",  outvars%allSpec(ipft)%gpp(itime)
                 ! outvars%allSpec(ipft)%nee           = vegn%allSp(ipft)%NEE
                 outvars%allSpec(ipft)%npp(itime)      = outvars%allSpec(ipft)%npp(itime)     + &
@@ -104,7 +104,7 @@ module update_and_summary
                                                           vegn%allSp(ipft)%transp*convert_g2kg*convert_h2s/ntime
                 ! other
                 outvars%allSpec(ipft)%lai(itime)      = outvars%allSpec(ipft)%lai(itime)    + &
-                                                          vegn%allSp(ipft)%LAI/ntime
+                                                          vegn%allSp(ipft)%lai/ntime
             enddo
         endif
         ! carbon fluxes (KgC m-2 s-1) Jian: TECO unit is gC m-2 h-1

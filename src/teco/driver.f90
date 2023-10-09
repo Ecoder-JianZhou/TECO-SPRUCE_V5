@@ -192,12 +192,12 @@ module driver
                                             (vegn%allSp(ipft)%NSCmax-vegn%allSp(ipft)%NSCmin)
                 endif
                 ! update vcmx0 and eJmx0 according to C/N of leaves
-                print*,"update snvxmax:", vegn%allSp(ipft)%Vcmax0,vegn%allSp(ipft)%SNvcmax*1.0e-6
+                ! print*,"update snvxmax:", vegn%allSp(ipft)%Vcmax0,vegn%allSp(ipft)%SNvcmax*1.0e-6
                 vegn%allSp(ipft)%Vcmx0 = vegn%allSp(ipft)%Vcmax0*vegn%allSp(ipft)%SNvcmax*1.0e-6
                 vegn%allSp(ipft)%eJmx0 = 1.67*vegn%allSp(ipft)%Vcmx0 ! Weng 02/21/2011 Medlyn et al. 2002 
                 vegn%allSp(ipft)%eJmx0 = vegn%allSp(ipft)%JV*vegn%allSp(ipft)%Vcmx0   ! added for acclimation study,replace 1.67 with JV Feb 19 2019 Shuang  
             enddo
-            print*,"before LAI: ", vegn%allSp(1)%LAI
+            ! print*,"before LAI: ", vegn%allSp(1)%LAI
             call vegn_canopy(vegn, forcing(iclim))      ! run canopy module
             ! run soil water processes
             call soilwater(vegn, forcing(iclim))                      
@@ -209,9 +209,9 @@ module driver
             call vegn_plantgrowth(vegn, forcing(iclim))
 
             ! THE Fourth PART: simulating C influx allocation in pools
-            print*, "before TCS_CN: ", vegn%allSp(1)%npp
+            ! print*, "before TCS_CN: ", vegn%allSp(1)%npp
             call TCS_CN(vegn, forcing(iclim)) 
-            print*, "after TCS_CN: ", vegn%allSp(1)%npp  
+            ! print*, "after TCS_CN: ", vegn%allSp(1)%npp  
             ! if (do_matrix) call matrix_struct() 
             call methane(vegn, forcing(iclim))        !update single value of Rh_pools,Tsoil,zwt,wsc 
             ! update NSC
@@ -226,6 +226,7 @@ module driver
                     vegn%allSp(ipft)%NSN    = vegn%allSp(ipft)%NSN    - vegn%allSp(ipft)%NSC/vegn%allSp(ipft)%CN(2)
                     vegn%allSp(ipft)%NSC    = 0.
                 endif
+                ! vegn%allSp(ipft)%NSN     = 0.35
                 vegn%allSp(ipft)%bmleaf  = vegn%allSp(ipft)%QC(1)/0.48
                 vegn%allSp(ipft)%bmstem  = vegn%allSp(ipft)%QC(2)/0.48
                 vegn%allSp(ipft)%bmroot  = vegn%allSp(ipft)%QC(3)/0.48
@@ -258,7 +259,7 @@ module driver
                     vegn%NSN     = vegn%NSN + vegn%allSp(ipft)%NSN
                 endif
             enddo 
-            print*,"end LAI: ", vegn%allSp(1)%LAI, vegn%allSp(1)%bmleaf, vegn%allSp(1)%SLA
+            ! print*,"end LAI: ", vegn%allSp(1)%LAI, vegn%allSp(1)%bmleaf, vegn%allSp(1)%SLA
 
             ! Rhetero=Rh_f + Rh_c + Rh_Micr + Rh_Slow + Rh_Pass
             st%Rhetero = st%Rh_pools(1) + st%Rh_pools(2) + st%Rh_pools(3) &
@@ -283,7 +284,7 @@ module driver
                 iTotDaily = iTotDaily + 1 
             end if
             
-            ! if (do_mcmc) call GetSimuData(iyear, iday, ihour)
+            if (do_mcmc) call GetSimuData(iyear, iday, ihour, vegn, st)
                  
             if (iclim < nforcing)then
                 if (forcing(iclim+1)%year>iyear) then            

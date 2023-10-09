@@ -2,6 +2,8 @@ program TECO
     use datatypes
     use driver
     use io_mod
+    use mcmc
+    use mcmc_mod
     
     implicit none
     integer :: count_mode, nHours, nDays, nMonths, nYears 
@@ -57,15 +59,7 @@ program TECO
     nYears  = int(nforcing/(365*24))
     nMonths = nYears*12
 
-    call initilize(file_site_params, files_pft_params, vegn)
-    count_pft = vegn%npft
-
-    if(do_out_hr)  call assign_outVars(nHours,  outVars_h, count_pft)
-    if(do_out_day) call assign_outVars(nDays,   outVars_d, count_pft)
-    if(do_out_mon) call assign_outVars(nMonths, outVars_m, count_pft)
-    if(do_out_yr)  call assign_outVars(nYears,  outVars_y, count_pft)
-
-    print *, allocated(outVars_y%gpp), nYears
+    ! print *, allocated(outVars_y%gpp), nYears
     if (.not. do_snow) call get_snowdepth()
     if (do_restart)then
         ! call read_restart(restartfile)     ! this module in "writeOutput2nc.f90"
@@ -74,7 +68,15 @@ program TECO
 
     if(do_simu)then
         print *, "# Start to run simulation mode."
+        call initilize(file_site_params, files_pft_params, vegn)
+        count_pft = vegn%npft
+        if(do_out_hr)  call assign_outVars(nHours,  outVars_h, count_pft)
+        if(do_out_day) call assign_outVars(nDays,   outVars_d, count_pft)
+        if(do_out_mon) call assign_outVars(nMonths, outVars_m, count_pft)
+        if(do_out_yr)  call assign_outVars(nYears,  outVars_y, count_pft)
+        ! Start to run TECO model
         call teco_simu(vegn)            ! run simulation
+        ! write the output data
 #ifdef USE_NETCDF
         if(do_out_hr)  call write_outputs_nc(outDir_h, outVars_h, nHours, "hourly") 
         if(do_out_day) call write_outputs_nc(outDir_d, outVars_d, nDays,  "daily") 
@@ -86,13 +88,15 @@ program TECO
         if(do_out_mon) call write_outputs_csv(outDir_csv, outVars_m, nMonths,"monthly") 
 
     elseif(do_spinup)then
+        print*, "# Start to run MCMC mode."
         ! call init_spinup_variables()    ! initilize the spin-up variables
         ! call run_spinup()               ! run spin-up loops
         ! call write_spinup_res()         ! write the results of SPIN-UP
         ! call write_restart()            ! write the result file
         ! call deallo_spinup_variables()  ! deallocate the variables of SPIN-UP
     elseif(do_mcmc) then
-        ! call init_mcmc()                ! initilize the MCMC 
+        print*, "# Start to run MCMC mode."
+        call init_mcmc(files_pft_params, vegn)  ! initilize the MCMC 
         ! call run_mcmc()                 ! run MCMC
         ! call deallocate_mcmc()          ! deallocate the MCMC variables 
     endif
@@ -161,7 +165,7 @@ subroutine createNewCase()
     outDir_csv = adjustl(trim(outdir_case))//"\"//adjustl(trim(outDir_csv))
 #endif
     call CreateFolder(adjustl(trim(outDir_csv)))
-    print*, outDir_csv
+    ! print*, outDir_csv
 
     ! update and create the output for each time frequency of nc-format outputs
     if (do_out_hr) then

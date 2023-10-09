@@ -234,7 +234,7 @@ module datatypes
         real :: SNvcmax, SNgrowth, SNRauto, JV
         real :: fnsc, NSN, N_miner, N_transfer, N_uptake, N_fixation
         real :: OutN(8), alphaN, N_deficit, Rnitrogen
-        real :: N_leaf, N_wood, N_root
+        real :: N_leaf, N_wood, N_root, N_demand
         ! 
         integer :: onset
         real :: alpha_L, alpha_W, alpha_R
@@ -869,6 +869,7 @@ contains
         spec%QN      = init_params%QC/init_params%CN0
         spec%NSCmin  = init_params%NSCmin
         spec%storage = init_params%Storage
+        spec%stor_use= spec%Storage/times_storage_use
         spec%nsc     = init_params%nsc
         spec%accumulation = init_params%accumulation
         spec%SNvcmax = init_params%SNvcmax
@@ -900,9 +901,7 @@ contains
 
         COUNT = 0
         OPEN(1,FILE=climfile,status='old',ACTION='read',IOSTAT=STAT)
-        print *, "here ..1.. ", climfile, STAT
         read(1,'(a160)') commts
-        print *, "here .. "
         DO WHILE (.TRUE.)
             COUNT=COUNT+1
             READ(1,*,IOSTAT=STAT, end=993) tmp_yr, tmp_doy, tmp_h,   &

@@ -1,5 +1,5 @@
 &nml_teco_settings
-    case_name   = "test"     ! define the case name
+    case_name   = "test_mcmc"     ! define the case name
     do_simu     = True           ! simulation mode
     do_mcmc     = False           ! MCMC for data assimilation mode
     do_spinup   = False           ! spinup mode

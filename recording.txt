@@ -1,0 +1,4 @@
+N_deficit
+N_demand
+Vcmax0
+SNvcmax
