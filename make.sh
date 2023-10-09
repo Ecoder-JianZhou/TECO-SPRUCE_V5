@@ -1,4 +1,4 @@
-gfortran  -g -fbacktrace -Wall -fcheck=all -cpp \
+gfortran  -g -fbacktrace -Wall -fcheck=all -cpp -DUSE_NETCDF\
     src/teco/datatypes.f90 \
     src/teco/updateAndSummary.f90 \
     src/teco/io_mod.f90 \
@@ -11,7 +11,8 @@ gfortran  -g -fbacktrace -Wall -fcheck=all -cpp \
     src/tools/mcmc.f90   \
     `# src/tools/spinup.f90`  \
     src/main.f90 \
-    -o run_teco 
+    -o run_teco \
+    -I/home/jz964/miniconda3/include -L/home/jz964/miniconda3/lib -lnetcdff -lnetcdf
 
 if find "src" -name "*.mod" -print -quit | grep -q '.*'; then
     rm src/*.mod

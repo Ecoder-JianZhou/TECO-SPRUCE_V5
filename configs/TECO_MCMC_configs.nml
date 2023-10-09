@@ -7,9 +7,11 @@
     do_mc_out_day  = True
     do_mc_out_mon  = False
     do_mc_out_yr   = False
+    nSpecParams    = 60
 /
 
 &nml_obsfiles
+    
     obsfile_gpp_d   = "observation_files/obsfile_gpp_d.txt"
     obsfile_nee_d   = "observation_files/obsfile_nee_d.txt"
     obsfile_reco_d  = "observation_files/obsfile_reco_d.txt"
@@ -21,12 +23,15 @@
     ! c pools
     obsfile_cleaf   = "observation_files/obsfile_cleaf_d.txt" ! foliage
     obsfile_cwood   = "observation_files/obsfile_cwood_d.txt"
-
-    obsfile_anpp_y  = "observation_files/obsfile_ANPP.txt"  !"observation_files/obsfile_ANPP_Tree.txt"
-    obsfile_bnpp_y  = "observation_files/obsfile_BNPP_t.txt"  ! "observation_files/obsfile_BNPP.txt"
-    obsfile_lai_h   = "observation_files/obsfile_LAI_h.txt"
-    obsfile_npp_y   = "observation_files/obsfile_NPP.txt"
-    obsfile_reco_y  = "observation_files/obsfile_RHCO2_t.txt"
+    
+    ! special variables
+    obsfile_anpp_y  = "observation_files/obsfile_ANPP_Tree_y.txt",
+                      "observation_files/obsfile_ANPP_Shrub_y.txt",
+                      "observation_files/obsfile_ANPP_Shag_y.txt"
+    obsfile_bnpp_y  = "observation_files/obsfile_BNPP_y.txt"  ! "observation_files/obsfile_BNPP.txt"
+    obsfile_lai_h   = "observation_files/obsfile_LAI_Tree_h.txt",
+                      "observation_files/obsfile_LAI_Shrub_h.txt",
+                      "observation_files/obsfile_LAI_Shag_h.txt"
 &end
 
 &nml_param_names

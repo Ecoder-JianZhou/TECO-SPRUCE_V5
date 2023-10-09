@@ -2,8 +2,8 @@ module MCMC_outputs
 #ifdef USE_NETCDF
     use netcdf
 #endif
-    use mod_data
-    use mcmc_functions
+    use datatypes
+    use mcmc_mod
     implicit none
     ! This part of results will be stored in CSV-format
 
@@ -79,7 +79,11 @@ module MCMC_outputs
         real, allocatable :: lai(:, :)                     ! m2 m-2, Leaf area index            
     end type mcmc_outVars_type
 
-    real, allocatable :: tot_paramsets(:,:), upg_paramsets(:,:), sel_paramsets(:,:) 
+    type params_sets
+        real, allocatable :: tot_paramsets(:,:), upg_paramsets(:,:), sel_paramsets(:,:) 
+    end type params_sets
+    type(params_sets), allocatable :: arr_params_set(:)
+    
     type(mcmc_outVars_type) sel_paramsets_outs_h
     type(mcmc_outVars_type) sel_paramsets_outs_d
     type(mcmc_outVars_type) sel_paramsets_outs_m
@@ -98,14 +102,18 @@ contains
     subroutine init_mcmc_outputs(nDAsimu, npar4DA)
         implicit none
         integer, intent(in) :: nDAsimu, npar4DA
+        integer :: ipft, npft
 
         allocate(rand_number(nRand))
 
         write(str_startyr,"(I4)")forcing(1)%year
         write(str_endyr,"(I4)")forcing(nforcing)%year
 
-        allocate(tot_paramsets(nDAsimu,npar4DA))
-        allocate(sel_paramsets(nRand, npar4DA))    ! select 500 parameter sets
+        do ipft = 1, npft
+            allocate(arr_params_set(ipft)%tot_paramsets(nDAsimu,npar4DA))
+            allocate(arr_params_set(ipft)%sel_paramsets(nRand, npar4DA))    ! select 500 parameter sets
+        enddo
+
         if (do_mc_out_hr) then
             call allocate_mcmc_outs_type(nRand, nHours,  sel_paramsets_outs_h)
             call allocate_mcmc_outs_type(nDAsimu, nHours,  tot_paramsets_outs_h)
@@ -130,6 +138,7 @@ contains
         integer, intent(in) :: DAparidx(:)
         character(20), allocatable :: DA_parname(:)
         character(1200) :: header_line
+        integer :: ipft, npft
 
         allocate(DA_parname(npar4DA))
         header_line = ""
@@ -141,41 +150,46 @@ contains
         ! delete the built-in
         nBuilt_in = int(0.1*nUpgraded)
         if (nBuilt_in .lt. 1) nBuilt_in = 1
-        allocate(upg_paramsets(nUpgraded - nBuilt_in, npar4DA))
-        write(*,*)"test_all", nBuilt_in, nUpgraded, size(tot_paramsets,1), size(tot_paramsets,2)
-        upg_paramsets = tot_paramsets(nBuilt_in:nUpgraded, :)
-
-        outfile_mc_ParamSets = adjustl(trim(outDir_mcmc))//"/"//adjustl(trim("total_parameter_sets.txt"))
-
-        open(118, file=outfile_mc_ParamSets, status='replace')
-        write(118, *) header_line(2:)
-        do iline = 1, size(upg_paramsets, 1)
-            write(118, '(*(ES10.3,:,","))') upg_paramsets(iline,:)
+        do ipft = 1, npft
+            allocate(arr_params_set(ipft)%upg_paramsets(nUpgraded - nBuilt_in, npar4DA))
+            arr_params_set(ipft)%upg_paramsets = arr_params_set(ipft)%tot_paramsets(nBuilt_in:nUpgraded, :)
+            ! write(*,*)"test_all", nBuilt_in, nUpgraded, size(tot_paramsets,1), size(tot_paramsets,2)
+            outfile_mc_ParamSets = adjustl(trim(outDir_mcmc))//"/"//adjustl(trim("total_parameter_sets_"))&
+                //adjustl(trim(spec_names(ipft)))//adjustl(trim(".txt"))
+            open(118, file=outfile_mc_ParamSets, status='replace')
+            write(118, *) header_line(2:)
+            do iline = 1, size(arr_params_set(ipft)%upg_paramsets, 1)
+                write(118, '(*(ES10.3,:,","))') arr_params_set(ipft)%upg_paramsets(iline,:)
+            enddo
+            close(118)
         enddo
-        close(118)
 
         ! choose the random 100 parameter sets and simulations
         call generate_random_numbers(1, nUpgraded - nBuilt_in, rand_number)
-        do inum = 1, nRand
-            sel_paramsets(inum, :) = upg_paramsets(rand_number(inum),:)
-            if (do_mc_out_hr) then
-                call select_mcmc_simu_outputs(rand_number(inum), inum, tot_paramsets_outs_h, sel_paramsets_outs_h)
-            endif
-            if (do_mc_out_day) then
-                call select_mcmc_simu_outputs(rand_number(inum), inum, tot_paramsets_outs_d, sel_paramsets_outs_d)
-            endif
-            if (do_mc_out_mon) then
-                call select_mcmc_simu_outputs(rand_number(inum), inum, tot_paramsets_outs_m, sel_paramsets_outs_m)
-            endif
-        enddo
 
-        outfile_mc_ParamSets = adjustl(trim(outDir_mcmc))//"/"//adjustl(trim("sel_parameter_sets.txt"))
-        open(137, file=outfile_mc_ParamSets, status='replace')
-        write(137, *) header_line(2:)
-        do iline = 1, nRand
-            write(137, '(*(ES10.3,:,","))') sel_paramsets(iline,:)
+        do ipft = 1, npft
+            do inum = 1, nRand
+                arr_params_set(ipft)%sel_paramsets(inum, :) = arr_params_set(ipft)%upg_paramsets(rand_number(inum),:)
+                if (do_mc_out_hr) then
+                    call select_mcmc_simu_outputs(rand_number(inum), inum, tot_paramsets_outs_h, sel_paramsets_outs_h)
+                endif
+                if (do_mc_out_day) then
+                    call select_mcmc_simu_outputs(rand_number(inum), inum, tot_paramsets_outs_d, sel_paramsets_outs_d)
+                endif
+                if (do_mc_out_mon) then
+                    call select_mcmc_simu_outputs(rand_number(inum), inum, tot_paramsets_outs_m, sel_paramsets_outs_m)
+                endif
+            enddo
+
+            outfile_mc_ParamSets = adjustl(trim(outDir_mcmc))//"/"//adjustl(trim("sel_parameter_sets_"))&
+                //adjustl(trim(spec_names(ipft)))//adjustl(trim(".txt"))
+            open(137, file=outfile_mc_ParamSets, status='replace')
+            write(137, *) header_line(2:)
+            do iline = 1, nRand
+                write(137, '(*(ES10.3,:,","))') arr_params_set(ipft)%sel_paramsets(iline,:)
+            enddo
+            close(137)
         enddo
-        close(137)
 
         ! save the selected simulations to nc format results
         if (do_mc_out_hr) then
@@ -190,7 +204,9 @@ contains
 
         ! deallocate
         deallocate(DA_parname)
-        deallocate(upg_paramsets)
+        do ipft = 1, npft
+            deallocate(arr_params_set(ipft)%upg_paramsets)
+        enddo
     end subroutine mcmc_param_outputs
 
     subroutine select_mcmc_simu_outputs(idx_tot, idx_sel, total_simus, selected_simus)
@@ -274,7 +290,7 @@ contains
         implicit none
         integer, intent(in) :: upgraded
         type(mcmc_outVars_type), intent(inout)   :: dataType
-        type(tot_output_vars_type), intent(in) :: simu_outputs
+        type(outvars_data_type), intent(in) :: simu_outputs
 
         dataType%gpp(upgraded, :)            = simu_outputs%gpp    
         dataType%nee(upgraded, :)            = simu_outputs%nee
@@ -496,7 +512,7 @@ contains
         
         allocate(character(len=200+len(outfile)) :: nc_fileName)
         nc_fileName = adjustl(trim(outfile))//"/"//adjustl(trim(varName))//"_"//freq//"_TECO-SPRUCE_"//&
-            & adjustl(trim(simu_name))//"_"//adjustl(trim(str_startyr))//"-"//adjustl(trim(str_endyr))//".nc"   
+            & adjustl(trim(case_name))//"_"//adjustl(trim(str_startyr))//"-"//adjustl(trim(str_endyr))//".nc"   
         
         !Create the netCDF file.
         CALL check_mc(nf90_create(nc_fileName, NF90_CLOBBER, ncid))

@@ -2,3 +2,19 @@ N_deficit
 N_demand
 Vcmax0
 SNvcmax
+call generate_newPar(mc_DApar(ipft)%DApar_old, mc_DApar(ipft)%DAparmin, &
+                     mc_DApar(ipft)%DAparmax, mc_DApar(ipft)%DApar)
+
+    type params_DApar
+        real, allocatable :: DAparmin(:)
+        real, allocatable :: DAparmax(:)
+        real, allocatable :: DApar(:)
+        real, allocatable :: DApar_old(:)
+        integer, allocatable :: DAparidx(:)
+        real, allocatable :: gamma(:,:)
+        real, allocatable :: gamnew(:,:)
+        real, allocatable :: coefhistory(:,:)
+        real, allocatable :: coefnorm(:)
+        real, allocatable :: coefac(:)
+    end type params_DApar
+    type(params_DApar), allocatable :: mc_DApar(:)
