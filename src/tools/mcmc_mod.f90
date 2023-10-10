@@ -5,7 +5,7 @@ module mcmc_mod
 
     ! parameters and observation files
 
-    integer npar, nDAsimu, ncov, nRand
+    integer npar, nDAsimu, ncov, nRand, nSpecParams
     real search_scale
     logical :: do_mc_out_hr, do_mc_out_day, do_mc_out_mon, do_mc_out_yr
 
@@ -24,24 +24,30 @@ module mcmc_mod
     real mc_f_F2M, mc_f_C2M, mc_f_C2S, mc_f_M2S
     real mc_f_M2P, mc_f_S2P, mc_f_S2M, mc_f_P2M
 
-    type params_mcmc
-        real lat, Longitude, wsmax, wsmin
-        real LAIMAX, LAIMIN, rdepth, Rootmax, Stemmax
-        real SapR, SapS, SLA, GLmax, GRmax, Gsmax, stom_n
-        real a1, Ds0, Vcmx0, extkU, xfang, alpha
-        real Tau_Leaf, Tau_Wood, Tau_Root, Tau_F
-        real Tau_C,  Tau_Micro, Tau_SlowSOM, Tau_Passive
-        real gddonset, Q10, Rl0, Rs0, Rr0
-        real r_me, Q10pro, kCH4, Omax, CH4_thre
-        real Tveg, Tpro_me, Toxi
-        real f, bubprob, Vmaxfraction
-        real Q10rh, JV, Entrpy
-        real etaL, etaW, etaR
-        real f_F2M, f_C2M, f_C2S, f_M2S
-        real f_M2P, f_S2P, f_S2M, f_P2M
-    end type params_mcmc
+    ! type params_mcmc
+    !     real lat, Longitude, wsmax, wsmin
+    !     real LAIMAX, LAIMIN, rdepth, Rootmax, Stemmax
+    !     real SapR, SapS, SLA, GLmax, GRmax, Gsmax, stom_n
+    !     real a1, Ds0, Vcmx0, extkU, xfang, alpha
+    !     real Tau_Leaf, Tau_Wood, Tau_Root, Tau_F
+    !     real Tau_C,  Tau_Micro, Tau_SlowSOM, Tau_Passive
+    !     real gddonset, Q10, Rl0, Rs0, Rr0
+    !     real r_me, Q10pro, kCH4, Omax, CH4_thre
+    !     real Tveg, Tpro_me, Toxi
+    !     real f, bubprob, Vmaxfraction
+    !     real Q10rh, JV, Entrpy
+    !     real etaL, etaW, etaR
+    !     real f_F2M, f_C2M, f_C2S, f_M2S
+    !     real f_M2P, f_S2P, f_S2M, f_P2M
+    ! end type params_mcmc
 
-    type(params_mcmc), allocatable :: parval(:), parmin(:), parmax(:)
+    type params_mcmc
+        real, allocatable :: parval(:)
+        real, allocatable :: parmin(:)
+        real, allocatable :: parmax(:)
+    end type params_mcmc
+    type(params_mcmc), allocatable :: mc_parvals(:)
+
 
     ! type(nml_params_data_type) :: in_params, in_parval, in_parval_min, in_parval_max
     ! real, allocatable :: parval(:), parmin(:), parmax(:)
@@ -66,26 +72,28 @@ module mcmc_mod
         real, allocatable :: mdData(:,:)
     end type interCostVariable
 
+    type spec_interCostVariable
+        ! for different species
+        type(interCostVariable) :: anpp_y
+        type(interCostVariable) :: bnpp_y
+        type(interCostVariable) :: lai_h
+    end type spec_interCostVariable
+
     type allCostVariables
     ! default variables, you can add the variable names here. (year, doy, hour, value, std.)
         ! carbon flux 
-        type(interCostVariable) :: gpp_d
-        type(interCostVariable) :: nee_d
-        type(interCostVariable) :: reco_d
-        type(interCostVariable) :: gpp_h
-        type(interCostVariable) :: nee_h
-        type(interCostVariable) :: reco_h
+        type(interCostVariable) :: gpp_d    ! shagnum, shrub
+        type(interCostVariable) :: nee_d    ! shagnum, shrub
+        type(interCostVariable) :: reco_d   ! shagnum, shrub
+        type(interCostVariable) :: gpp_h    ! shagnum, shrub
+        type(interCostVariable) :: nee_h    ! shagnum, shrub
+        type(interCostVariable) :: reco_h   ! shagnum, shrub
         ! methane
         type(interCostVariable) :: ch4_h
         ! c pools
         type(interCostVariable) :: cleaf    ! foliage
         type(interCostVariable) :: cwood
-        ! for different species
-        type(interCostVariable) :: anpp_y
-        type(interCostVariable) :: bnpp_y
-        type(interCostVariable) :: lai_h
-        type(interCostVariable) :: npp_y
-        type(interCostVariable) :: reco_y
+        type(spec_interCostVariable), allocatable :: spec_vars(:)
     end type allCostVariables
 
     type(allCostVariables) :: vars4MCMC      ! define a allCostVariables first
@@ -124,6 +132,7 @@ module mcmc_mod
     end subroutine mcmc_functions_init
 
     subroutine readConfsNml()
+        integer ipft, npft
         character(20) :: parnames_1, parnames_2, parnames_3, parnames_4, parnames_5 
         character(20) :: parnames_6, parnames_7, parnames_8, parnames_9, parnames_10
 
@@ -161,9 +170,9 @@ module mcmc_mod
                 parnames_56, parnames_57, parnames_58, parnames_59, parnames_60
 
         namelist /nml_mcmc_settings/ nDAsimu, search_scale, ncov, nRand, &
-                do_mc_out_hr, do_mc_out_day, do_mc_out_mon, do_mc_out_yr
+                do_mc_out_hr, do_mc_out_day, do_mc_out_mon, do_mc_out_yr, nSpecParams
 
-        open(145, file=mcmc_conf_file)
+        open(145, file=mcmc_configfile)
         read(145, nml=nml_mcmc_settings)
         read(145, nml=nml_obsfiles)
         read(145, nml=nml_param_names)
@@ -231,34 +240,37 @@ module mcmc_mod
         parnames(60)  = parnames_60
 
 
+        
         ! give the filepath to each variable
-        vars4MCMC%gpp_d%filepath  = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_gpp_d))
-        vars4MCMC%nee_d%filepath  = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_nee_d))
-        vars4MCMC%reco_d%filepath = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_reco_d))
-        vars4MCMC%gpp_h%filepath  = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_gpp_h))
-        vars4MCMC%nee_h%filepath  = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_nee_h))
-        vars4MCMC%reco_h%filepath = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_reco_h))
+        vars4MCMC%gpp_d%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_gpp_d))
+        vars4MCMC%nee_d%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_nee_d))
+        vars4MCMC%reco_d%filepath = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_reco_d))
+        vars4MCMC%gpp_h%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_gpp_h))
+        vars4MCMC%nee_h%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_nee_h))
+        vars4MCMC%reco_h%filepath = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_reco_h))
         ! methane   
-        vars4MCMC%ch4_h%filepath  = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_ch4_h))
+        vars4MCMC%ch4_h%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_ch4_h))
         ! c pools
-        vars4MCMC%cleaf%filepath  = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_cleaf)) ! foliage
-        vars4MCMC%cwood%filepath  = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_cwood))
+        vars4MCMC%cleaf%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_cleaf)) ! foliage
+        vars4MCMC%cwood%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_cwood))
 
-        vars4MCMC%anpp_y%filepath = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_anpp_y))
-        vars4MCMC%bnpp_y%filepath = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_bnpp_y))
-        vars4MCMC%lai_h%filepath  = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_lai_h))
-        vars4MCMC%npp_y%filepath  = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_npp_y))
-        vars4MCMC%reco_y%filepath = adjustl(trim(filepath_in))//"/"//adjustl(trim(obsfile_reco_y))
+        npft = count_pft
+        allocate(vars4MCMC%spec_vars(npft))
+        do ipft = 1, npft
+            vars4MCMC%spec_vars(ipft)%anpp_y%filepath = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_anpp_y))
+            vars4MCMC%spec_vars(ipft)%bnpp_y%filepath = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_bnpp_y))
+            vars4MCMC%spec_vars(ipft)%lai_h%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_lai_h))
+        enddo
         return
     end subroutine readConfsNml
 
-    subroutine readParamNml(param_nml_file, in_params, init_params, mc_parval, mc_parmin, mc_parmax)
+    subroutine readParamNml(param_nml_file, in_params, init_params, arr_parval, arr_parmin, arr_parmax)
     ! default nml file name of "TECO_MCMC_configs.nml"
         implicit none
         character(*), intent(in) :: param_nml_file
         type(nml_params_data_type), intent(inout)    :: in_params
         type(nml_initValue_data_type), intent(inout) :: init_params
-        type(params_mcmc), intent(inout) :: mc_parval, mc_parmin, mc_parmax
+        real, intent(inout) :: arr_parval(:), arr_parmin(:), arr_parmax(:)
         integer io
 
         ! ! site special variables that are read from namelist file
@@ -390,11 +402,11 @@ module mcmc_mod
         read(343, nml  = nml_params,         iostat=io)
         read(343, nml  = nml_initial_values, iostat=io)
         read(343, nml  = nml_parval,         iostat=io)
-        call giveValues2par(mc_parval)
+        call giveValues2par(arr_parval)
         read(343, nml=nml_parmin,         iostat=io)
-        call giveValues2par(mc_parmin)
+        call giveValues2par(arr_parmin)
         read(343, nml=nml_parmax,         iostat=io)
-        call giveValues2par(mc_parmax)
+        call giveValues2par(arr_parmax)
         close(343)
         ! update the parameters in in_params and init_params
         in_params%lat         = lat
@@ -524,6 +536,7 @@ module mcmc_mod
         implicit none
         logical toExistOrNot
         integer toCountLines
+        integer :: ipft, npft
         ! existornot, data 
 
         ! gpp_d
@@ -608,256 +621,110 @@ module mcmc_mod
             allocate(vars4MCMC%cwood%mdData(toCountLines, 4))
         endif
 
-        ! anpp_y
-        INQUIRE(FILE=vars4MCMC%anpp_y%filepath, EXIST=toExistOrNot)
-        vars4MCMC%anpp_y%existOrNot = toExistOrNot
-        if (vars4MCMC%anpp_y%existOrNot) then
-            call ReadLineNumFromFile(vars4MCMC%anpp_y%filepath, toCountLines)
-            allocate(vars4MCMC%anpp_y%obsData(toCountLines, 5))
-            call ReadObsDataFromFile(vars4MCMC%anpp_y%filepath, toCountLines, vars4MCMC%anpp_y%obsData)
-            allocate(vars4MCMC%anpp_y%mdData(toCountLines, 4))
-        endif
+        npft = count_pft
+        do ipft = 1, npft
+            ! anpp_y
+            INQUIRE(FILE=vars4MCMC%spec_vars(ipft)%anpp_y%filepath, EXIST=toExistOrNot)
+            vars4MCMC%spec_vars(ipft)%anpp_y%existOrNot = toExistOrNot
+            if (vars4MCMC%spec_vars(ipft)%anpp_y%existOrNot) then
+                call ReadLineNumFromFile(vars4MCMC%spec_vars(ipft)%anpp_y%filepath, toCountLines)
+                allocate(vars4MCMC%spec_vars(ipft)%anpp_y%obsData(toCountLines, 5))
+                call ReadObsDataFromFile(vars4MCMC%spec_vars(ipft)%anpp_y%filepath, toCountLines, &
+                     vars4MCMC%spec_vars(ipft)%anpp_y%obsData)
+                allocate(vars4MCMC%spec_vars(ipft)%anpp_y%mdData(toCountLines, 4))
+            endif
 
-        ! bnpp_y
-        INQUIRE(FILE=vars4MCMC%bnpp_y%filepath, EXIST=toExistOrNot)
-        vars4MCMC%bnpp_y%existOrNot = toExistOrNot
-        if (vars4MCMC%bnpp_y%existOrNot) then
-            call ReadLineNumFromFile(vars4MCMC%bnpp_y%filepath, toCountLines)
-            allocate(vars4MCMC%bnpp_y%obsData(toCountLines, 5))
-            call ReadObsDataFromFile(vars4MCMC%bnpp_y%filepath, toCountLines, vars4MCMC%bnpp_y%obsData)
-            allocate(vars4MCMC%bnpp_y%mdData(toCountLines, 4))
-        endif
+            ! bnpp_y
+            INQUIRE(FILE=vars4MCMC%spec_vars(ipft)%bnpp_y%filepath, EXIST=toExistOrNot)
+            vars4MCMC%spec_vars(ipft)%bnpp_y%existOrNot = toExistOrNot
+            if (vars4MCMC%spec_vars(ipft)%bnpp_y%existOrNot) then
+                call ReadLineNumFromFile(vars4MCMC%spec_vars(ipft)%bnpp_y%filepath, toCountLines)
+                allocate(vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(toCountLines, 5))
+                call ReadObsDataFromFile(vars4MCMC%spec_vars(ipft)%bnpp_y%filepath, toCountLines, &
+                    vars4MCMC%spec_vars(ipft)%bnpp_y%obsData)
+                allocate(vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(toCountLines, 4))
+            endif
 
-        ! lai_h
-        INQUIRE(FILE=vars4MCMC%lai_h%filepath, EXIST=toExistOrNot)
-        vars4MCMC%lai_h%existOrNot = toExistOrNot
-        if (vars4MCMC%lai_h%existOrNot) then
-            call ReadLineNumFromFile(vars4MCMC%lai_h%filepath, toCountLines)
-            allocate(vars4MCMC%lai_h%obsData(toCountLines, 5))
-            call ReadObsDataFromFile(vars4MCMC%lai_h%filepath, toCountLines, vars4MCMC%lai_h%obsData)
-            allocate(vars4MCMC%lai_h%mdData(toCountLines, 4))
-        endif
-
-        ! npp_y
-        INQUIRE(FILE=vars4MCMC%npp_y%filepath, EXIST=toExistOrNot)
-        vars4MCMC%npp_y%existOrNot = toExistOrNot
-        if (vars4MCMC%npp_y%existOrNot) then
-            call ReadLineNumFromFile(vars4MCMC%npp_y%filepath, toCountLines)
-            allocate(vars4MCMC%npp_y%obsData(toCountLines, 5))
-            call ReadObsDataFromFile(vars4MCMC%npp_y%filepath, toCountLines, vars4MCMC%npp_y%obsData)
-            allocate(vars4MCMC%npp_y%mdData(toCountLines, 4))
-        endif
-
-        ! reco_y
-        INQUIRE(FILE=vars4MCMC%reco_y%filepath, EXIST=toExistOrNot)
-        vars4MCMC%reco_y%existOrNot = toExistOrNot
-        if (vars4MCMC%reco_y%existOrNot) then
-            call ReadLineNumFromFile(vars4MCMC%reco_y%filepath, toCountLines)
-            allocate(vars4MCMC%reco_y%obsData(toCountLines, 5))
-            call ReadObsDataFromFile(vars4MCMC%reco_y%filepath, toCountLines, vars4MCMC%reco_y%obsData)
-            allocate(vars4MCMC%reco_y%mdData(toCountLines, 4))
-        endif
+            ! lai_h
+            INQUIRE(FILE=vars4MCMC%spec_vars(ipft)%lai_h%filepath, EXIST=toExistOrNot)
+            vars4MCMC%spec_vars(ipft)%lai_h%existOrNot = toExistOrNot
+            if (vars4MCMC%spec_vars(ipft)%lai_h%existOrNot) then
+                call ReadLineNumFromFile(vars4MCMC%spec_vars(ipft)%lai_h%filepath, toCountLines)
+                allocate(vars4MCMC%spec_vars(ipft)%lai_h%obsData(toCountLines, 5))
+                call ReadObsDataFromFile(vars4MCMC%spec_vars(ipft)%lai_h%filepath, toCountLines, &
+                     vars4MCMC%spec_vars(ipft)%lai_h%obsData)
+                allocate(vars4MCMC%spec_vars(ipft)%lai_h%mdData(toCountLines, 4))
+            endif
+        enddo
 
     end subroutine readObsData
 
-    subroutine renewMDpars()
+    subroutine renewMDpars(parval, re_in_params)
         implicit none
+        real, intent(in) :: parval(:)
+        type(nml_params_data_type), intent(inout) :: re_in_params
 
-
-st%extkU        = in_params%extkU
-st%rdepth       = in_params%rdepth
-st%Q10rh        = in_params%Q10rh
-st%Q10pro       = in_params%Q10pro
-st%r_me         = in_params%r_me
-st%Toxi         = in_params%Toxi
-st%Omax         = in_params%Omax
-st%kCH4         = in_params%kCH4
-st%CH4_thre     = in_params%CH4_thre
-st%Tveg         = in_params%Tveg
-st%bubprob      = in_params%bubprob
-st%Vmaxfraction = in_params%Vmaxfraction
-st%etaW         = in_params%etaW
-st%f            = in_params%f
-st%tauC(1)      = in_params%Tau_Leaf*8760.
-st%tauC(2)      = in_params%Tau_Wood*8760.
-st%tauC(3)      = in_params%Tau_Root*8760.
-st%tauC(4)      = in_params%Tau_F*8760.
-st%tauC(5)      = in_params%Tau_C*8760.
-st%tauC(6)      = in_params%Tau_Micro*8760.
-st%tauC(7)      = in_params%Tau_slowSOM*8760.
-st%tauC(8)      = in_params%Tau_Passive*8760.
-st%Tpro_me      = in_params%Tpro_me
-st%f_F2M        = in_params%f_F2M
-st%f_C2M        = in_params%f_C2M
-st%f_C2S        = in_params%f_C2S
-st%f_M2S        = in_params%f_M2S
-st%f_M2P        = in_params%f_M2P
-st%f_S2P        = in_params%f_S2P
-st%f_S2M        = in_params%f_S2M
-st%f_P2M        = in_params%f_P2M
-! initilize data
-st%G            = init_params%G
-st%QC           = init_params%QC
-st%CN0          = init_params%CN0
-st%CN           = init_params%CN0
-st%QN           = init_params%QC/init_params%CN0
-st%N_deposit    = init_params%N_deposit/8760.   ! Nitrogen input (gN/h/m2, )
-st%alphaN       = init_params%alphaN
-st%QNminer      = init_params%QNminer
-st%N_deficit    = init_params%N_deficit
-st%THKSL        = init_params%thksl
-st%FRLEN        = init_params%FRLEN
-st%liq_water    = init_params%liq_water
-st%fwsoil       = init_params%fwsoil
-st%topfws       = init_params%topfws
-st%omega        = init_params%omega
-st%zwt          = init_params%zwt
-st%infilt       = init_params%infilt
-st%sftmp        = init_params%sftmp
-st%Tsnow        = init_params%Tsnow
-st%Twater       = init_params%Twater
-st%Tice         = init_params%Tice
-st%snow_dsim    = init_params%snow_dsim
-st%dcount       = init_params%dcount
-st%dcount_soil  = init_params%dcount_soil
-st%ice_tw       = init_params%ice_tw
-st%Tsoill       = init_params%Tsoill
-st%ice          = init_params%ice
-st%shcap_snow   = init_params%shcap_snow
-st%condu_snow   = init_params%condu_snow
-st%condu_b      = init_params%condu_b
-st%depth_ex     = init_params%depth_ex
-st%diff_s       = init_params%diff_s
-st%diff_snow    = init_params%diff_snow
-st%albedo_snow  = init_params%albedo_snow
-st%resht        = init_params%resht
-st%thd_snow_depth = init_params%thd_snow_depth
-st%fa           = init_params%fa
-st%fsub         = init_params%fsub
-st%rho_snow     = init_params%rho_snow
-st%decay_m      = init_params%decay_m
-st%CH4_V        = init_params%CH4_V
-st%CH4          = init_params%CH4
-st%Vp           = init_params%Vp
-st%bubble_methane_tot = init_params%bubble_methane_tot
-st%Nbub         = st%Nbub
-st%depth(1)     = init_params%depth_1
-
-
-spec%LAImin = in_params%LAImin
-spec%LAImax = in_params%LAImax
-spec%SLA    = in_params%SLAx/10000.          ! Convert unit from cm2/g to m2/g
-spec%Rootmax = in_params%Rootmax
-spec%Stemmax = in_params%Stemmax
-spec%SapR    = in_params%SapR
-spec%SapS    = in_params%SapS
-spec%GLmax   = in_params%GLmax/8760.          ! growth rates of plant. Jian: per year to per hour ?
-spec%GRmax   = in_params%GRmax/8760.
-spec%Gsmax   = in_params%Gsmax/8760.
-spec%stom_n  = in_params%stom_n
-spec%Ds0     = in_params%Ds0
-spec%Vcmax0  = in_params%Vcmax0
-spec%xfang   = in_params%xfang
-spec%alpha   = in_params%alpha
-spec%gddonset = in_params%gddonset
-spec%Q10     = in_params%Q10
-spec%Rl0     = in_params%Rl0
-spec%Rs0     = in_params%Rs0
-spec%Rr0     = in_params%Rr0
-spec%JV      = in_params%JV
-spec%Entrpy  = in_params%Entrpy
-spec%alphaN  = init_params%alphaN
-! 
-spec%tauC(1)      = in_params%Tau_Leaf*8760.
-spec%tauC(2)      = in_params%Tau_Wood*8760.
-spec%tauC(3)      = in_params%Tau_Root*8760.
-! st%tauC(4)      = in_params%Tau_F
-! st%tauC(5)      = in_params%Tau_C
-! st%tauC(6)      = in_params%Tau_Micro
-! st%tauC(7)      = in_params%Tau_slowSOM
-! st%tauC(8)      = in_params%Tau_Passive
-spec%QC      = init_params%QC
-spec%CN0     = init_params%CN0
-spec%CN      = init_params%CN0
-spec%QN      = init_params%QC/init_params%CN0
-spec%NSCmin  = init_params%NSCmin
-spec%storage = init_params%Storage
-spec%stor_use= spec%Storage/times_storage_use
-spec%nsc     = init_params%nsc
-spec%accumulation = init_params%accumulation
-spec%SNvcmax = init_params%SNvcmax
-spec%NSN     = init_params%NSN
-spec%N_deficit = init_params%N_deficit
-spec%LAI     = spec%LAImin
-spec%bmleaf  = spec%QC(1)/0.48
-spec%bmstem  = spec%QC(2)/0.48
-spec%bmroot  = spec%QC(3)/0.48
-spec%hmax    = in_params%hmax        ! in plant growth hmax = 24.19   ! m
-spec%hl0     = in_params%hl0             ! in plant growth hl0  = 0.00019  ! m2/kg C
-spec%LAIMAX0 = in_params%LAIMAX0        ! in plant growth LAIMAX0 = 8.    ! maybe the LAImax
-spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
-
-
-        st%lat         = parval(1)
-        st%lon         = parval(2)
-        st%wsmax       = parval(3)
-        st%wsmin       = parval(4)                                            
-        LAIMAX      = parval(5)
-        LAIMIN      = parval(6)
-        rdepth      = parval(7)
-        Rootmax     = parval(8)
-        Stemmax     = parval(9)                                    
-        SapR        = parval(10)
-        SapS        = parval(11)
-        SLAx        = parval(12)
-        GLmax       = parval(13)
-        GRmax       = parval(14)
-        Gsmax       = parval(15)
-        stom_n      = parval(16)         
-        a1          = parval(17)
-        Ds0         = parval(18)
-        Vcmax0      = parval(19)
-        extkU       = parval(20)
-        xfang       = parval(21)
-        alpha       = parval(22)    
-        Tau_Leaf    = parval(23)
-        Tau_Wood    = parval(24)
-        Tau_Root    = parval(25)
-        Tau_F       = parval(26)
-        Tau_C       = parval(27)
-        Tau_Micro   = parval(28)
-        Tau_SlowSOM = parval(29)
-        Tau_Passive = parval(30)    
-        gddonset    = parval(31)
-        Q10         = parval(32)
-        Rl0         = parval(33)     
-        Rs0         = parval(34)    
-        Rr0         = parval(35)                    
-        r_me        = parval(36)
-        Q10pro      = parval(37)
-        kCH4        = parval(38)
-        Omax         = parval(39)
-        CH4_thre     = parval(40)
-        Tveg         = parval(41)
-        Tpro_me      = parval(42)
-        Toxi         = parval(43)        
-        f            = parval(44)
-        bubprob      = parval(45)
-        Vmaxfraction = parval(46)                                    
-        Q10rh        = parval(47)
-        JV           = parval(48)
-        Entrpy       = parval(49)                    
-        etaL         = parval(50)
-        etaW         = parval(51)
-        etaR         = parval(52)
-        f_F2M        = parval(53)
-        f_C2M        = parval(54)
-        f_C2S        = parval(55)
-        f_M2S        = parval(56)
-        f_M2P        = parval(57)
-        f_S2P        = parval(58)
-        f_S2M        = parval(59)
-        f_P2M        = parval(60)
+        re_in_params%lat         = parval(1)
+        re_in_params%lon         = parval(2)
+        re_in_params%wsmax       = parval(3)
+        re_in_params%wsmin       = parval(4)                                            
+        re_in_params%LAIMAX      = parval(5)
+        re_in_params%LAIMIN      = parval(6)
+        re_in_params%rdepth      = parval(7)
+        re_in_params%Rootmax     = parval(8)
+        re_in_params%Stemmax     = parval(9)                                    
+        re_in_params%SapR        = parval(10)
+        re_in_params%SapS        = parval(11)
+        re_in_params%SLAx        = parval(12)
+        re_in_params%GLmax       = parval(13)
+        re_in_params%GRmax       = parval(14)
+        re_in_params%Gsmax       = parval(15)
+        re_in_params%stom_n      = parval(16)         
+        re_in_params%a1          = parval(17)
+        re_in_params%Ds0         = parval(18)
+        re_in_params%Vcmax0      = parval(19)
+        re_in_params%extkU       = parval(20)
+        re_in_params%xfang       = parval(21)
+        re_in_params%alpha       = parval(22)    
+        re_in_params%Tau_Leaf    = parval(23)
+        re_in_params%Tau_Wood    = parval(24)
+        re_in_params%Tau_Root    = parval(25)
+        re_in_params%Tau_F       = parval(26)
+        re_in_params%Tau_C       = parval(27)
+        re_in_params%Tau_Micro   = parval(28)
+        re_in_params%Tau_SlowSOM = parval(29)
+        re_in_params%Tau_Passive = parval(30)    
+        re_in_params%gddonset    = parval(31)
+        re_in_params%Q10         = parval(32)
+        re_in_params%Rl0         = parval(33)     
+        re_in_params%Rs0         = parval(34)    
+        re_in_params%Rr0         = parval(35)                    
+        re_in_params%r_me        = parval(36)
+        re_in_params%Q10pro      = parval(37)
+        re_in_params%kCH4        = parval(38)
+        re_in_params%Omax         = parval(39)
+        re_in_params%CH4_thre     = parval(40)
+        re_in_params%Tveg         = parval(41)
+        re_in_params%Tpro_me      = parval(42)
+        re_in_params%Toxi         = parval(43)        
+        re_in_params%f            = parval(44)
+        re_in_params%bubprob      = parval(45)
+        re_in_params%Vmaxfraction = parval(46)                                    
+        re_in_params%Q10rh        = parval(47)
+        re_in_params%JV           = parval(48)
+        re_in_params%Entrpy       = parval(49)                    
+        re_in_params%etaL         = parval(50)
+        re_in_params%etaW         = parval(51)
+        re_in_params%etaR         = parval(52)
+        re_in_params%f_F2M        = parval(53)
+        re_in_params%f_C2M        = parval(54)
+        re_in_params%f_C2S        = parval(55)
+        re_in_params%f_M2S        = parval(56)
+        re_in_params%f_M2P        = parval(57)
+        re_in_params%f_S2P        = parval(58)
+        re_in_params%f_S2M        = parval(59)
+        re_in_params%f_P2M        = parval(60)
+        return
     end subroutine renewMDpars
 
 
@@ -877,79 +744,81 @@ spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
     !     return
     ! end subroutine giveValues2var
 
-    subroutine giveValues2par(mc_arr)
+    subroutine giveValues2par(arr_par)
         implicit none
-        type(params_mcmc), intent(inout) :: mc_arr
+        real(*), intent(inout) :: arr_par
+        print*, "size:",arr_par
 
-        mc_arr%lat  = mc_lat
-        mc_arr%Longitude  = mc_Longitude 
-        mc_arr%wsmax  = mc_wsmax 
-        mc_arr%wsmin  = mc_wsmin                                                      
-        mc_arr%LAIMAX  = mc_LAIMAX
-        mc_arr%LAIMIN  = mc_LAIMIN    
-        mc_arr%rdepth  = mc_rdepth    
-        mc_arr%Rootmax  = mc_Rootmax    
-        mc_arr%Stemmax  = mc_Stemmax                                            
-        mc_arr%SapR = mc_SapR    
-        mc_arr%SapS = mc_SapS     
-        mc_arr%SLA = mc_SLA        
-        mc_arr%GLmax = mc_GLmax    
-        mc_arr%GRmax = mc_GRmax    
-        mc_arr%Gsmax = mc_Gsmax    
-        mc_arr%stom_n = mc_stom_n                                            
-        mc_arr%a1 = mc_a1       
-        mc_arr%Ds0 = mc_Ds0        
-        mc_arr%Vcmx0 = mc_Vcmx0    
-        mc_arr%extkU = mc_extkU    
-        mc_arr%xfang = mc_xfang    
-        mc_arr%alpha = mc_alpha                         
-        mc_arr%Tau_Leaf = mc_Tau_Leaf   
-        mc_arr%Tau_Wood = mc_Tau_Wood   
-        mc_arr%Tau_Root = mc_Tau_Root   
-        mc_arr%Tau_F = mc_Tau_F       
-        mc_arr%Tau_C = mc_Tau_C       
-        mc_arr%Tau_Micro = mc_Tau_Micro   
-        mc_arr%Tau_SlowSOM = mc_Tau_SlowSOM 
-        mc_arr%Tau_Passive = mc_Tau_Passive                             
-        mc_arr%gddonset = mc_gddonset    
-        mc_arr%Q10 = mc_Q10         
-        mc_arr%Rl0 = mc_Rl0        
-        mc_arr%Rs0 = mc_Rs0        
-        mc_arr%Rr0 = mc_Rr0                            
-        mc_arr%r_me = mc_r_me   
-        mc_arr%Q10pro = mc_Q10pro   
-        mc_arr%kCH4 = mc_kCH4    
-        mc_arr%Omax = mc_Omax   
-        mc_arr%CH4_thre = mc_CH4_thre 
-        mc_arr%Tveg = mc_Tveg  
-        mc_arr%Tpro_me = mc_Tpro_me 
-        mc_arr%Toxi = mc_Toxi               
-        mc_arr%f = mc_f    
-        mc_arr%bubprob = mc_bubprob  
-        mc_arr%Vmaxfraction = mc_Vmaxfraction                                        
-        mc_arr%Q10rh = mc_Q10rh  
-        mc_arr%JV = mc_JV   
-        mc_arr%Entrpy = mc_Entrpy                                
-        mc_arr%etaL = mc_etaL   
-        mc_arr%etaW = mc_etaW  
-        mc_arr%etaR = mc_etaR   
-        mc_arr%f_F2M = mc_f_F2M   
-        mc_arr%f_C2M = mc_f_C2M  
-        mc_arr%f_C2S = mc_f_C2S 
-        mc_arr%f_M2S = mc_f_M2S  
-        mc_arr%f_M2P = mc_f_M2P 
-        mc_arr%f_S2P = mc_f_S2P  
-        mc_arr%f_S2M = mc_f_S2M  
-        mc_arr%f_P2M = mc_f_P2M 
-        return
+        arr_par(1)  = mc_lat
+        arr_par(2)  = mc_Longitude 
+        arr_par(3)  = mc_wsmax 
+        arr_par(4)  = mc_wsmin                                                      
+        arr_par(5)  = mc_LAIMAX
+        arr_par(6)  = mc_LAIMIN    
+        arr_par(7)  = mc_rdepth    
+        arr_par(8)  = mc_Rootmax    
+        arr_par(9)  = mc_Stemmax                                            
+        arr_par(10) = mc_SapR    
+        arr_par(11) = mc_SapS     
+        arr_par(12) = mc_SLA        
+        arr_par(13) = mc_GLmax    
+        arr_par(14) = mc_GRmax    
+        arr_par(15) = mc_Gsmax    
+        arr_par(16) = mc_stom_n                                            
+        arr_par(17) = mc_a1       
+        arr_par(18) = mc_Ds0        
+        arr_par(19) = mc_Vcmx0    
+        arr_par(20) = mc_extkU    
+        arr_par(21) = mc_xfang    
+        arr_par(22) = mc_alpha                         
+        arr_par(23) = mc_Tau_Leaf   
+        arr_par(24) = mc_Tau_Wood   
+        arr_par(25) = mc_Tau_Root   
+        arr_par(26) = mc_Tau_F       
+        arr_par(27) = mc_Tau_C       
+        arr_par(28) = mc_Tau_Micro   
+        arr_par(29) = mc_Tau_SlowSOM 
+        arr_par(30) = mc_Tau_Passive                             
+        arr_par(31) = mc_gddonset    
+        arr_par(32) = mc_Q10         
+        arr_par(33) = mc_Rl0        
+        arr_par(34) = mc_Rs0        
+        arr_par(35) = mc_Rr0                            
+        arr_par(36) = mc_r_me   
+        arr_par(37) = mc_Q10pro   
+        arr_par(38) = mc_kCH4    
+        arr_par(39) = mc_Omax   
+        arr_par(40) = mc_CH4_thre 
+        arr_par(41) = mc_Tveg  
+        arr_par(42) = mc_Tpro_me 
+        arr_par(43) = mc_Toxi               
+        arr_par(44) = mc_f    
+        arr_par(45) = mc_bubprob  
+        arr_par(46) = mc_Vmaxfraction                                        
+        arr_par(47) = mc_Q10rh  
+        arr_par(48) = mc_JV   
+        arr_par(49) = mc_Entrpy                                
+        arr_par(50) = mc_etaL   
+        arr_par(51) = mc_etaW  
+        arr_par(52) = mc_etaR   
+        arr_par(53) = mc_f_F2M   
+        arr_par(54) = mc_f_C2M  
+        arr_par(55) = mc_f_C2S 
+        arr_par(56) = mc_f_M2S  
+        arr_par(57) = mc_f_M2P 
+        arr_par(58) = mc_f_S2P  
+        arr_par(59) = mc_f_S2M  
+        arr_par(60) = mc_f_P2M 
+
     end subroutine giveValues2par
 
-    subroutine GetSimuData(get_iyear, get_iday, get_ihour, in_vegn)
+    subroutine GetSimuData(get_iyear, get_iday, get_ihour, in_vegn, nHr, nDay, nMon, nYr)
         implicit none
         type(vegn_tile_type), intent(in) :: in_vegn
+        integer, intent(in) :: nHr, nDay, nMon, nYr
 
         integer get_iyear, get_iday, get_ihour
-        integer i
+        integer i, ipft, npft
         ! vars4MCMC%
         mc_iyear = get_iyear
         mc_iday  = get_iday
@@ -978,7 +847,7 @@ spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
                     vars4MCMC%gpp_d%mdData(mc_itime_gpp_d, 1) = mc_iyear
                     vars4MCMC%gpp_d%mdData(mc_itime_gpp_d, 2) = mc_iday
                     vars4MCMC%gpp_d%mdData(mc_itime_gpp_d, 3) = mc_ihour
-                    vars4MCMC%gpp_d%mdData(mc_itime_gpp_d, 4) = outVars_d%gpp*86400000
+                    vars4MCMC%gpp_d%mdData(mc_itime_gpp_d, 4) = outVars_d%gpp(nDay)*86400000
                     mc_itime_gpp_d = mc_itime_gpp_d + 1
                 endif
             endif
@@ -996,7 +865,7 @@ spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
                     vars4MCMC%nee_d%mdData(mc_itime_nee_d, 1) = mc_iyear
                     vars4MCMC%nee_d%mdData(mc_itime_nee_d, 2) = mc_iday
                     vars4MCMC%nee_d%mdData(mc_itime_nee_d, 3) = mc_ihour
-                    vars4MCMC%nee_d%mdData(mc_itime_nee_d, 4) = outVars_d%nbp*86400000    ! the same in TECO model
+                    vars4MCMC%nee_d%mdData(mc_itime_nee_d, 4) = outVars_d%nee(nDay)*86400000    ! the same in TECO model
                     mc_itime_nee_d = mc_itime_nee_d + 1
                 endif
             endif
@@ -1015,7 +884,7 @@ spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
                     vars4MCMC%reco_d%mdData(mc_itime_reco_d, 1) = mc_iyear
                     vars4MCMC%reco_d%mdData(mc_itime_reco_d, 2) = mc_iday
                     vars4MCMC%reco_d%mdData(mc_itime_reco_d, 3) = mc_ihour
-                    vars4MCMC%reco_d%mdData(mc_itime_reco_d, 4) = (outVars_d%rh + outVars_d%ra)*86400000
+                    vars4MCMC%reco_d%mdData(mc_itime_reco_d, 4) = (outVars_d%ra(nDay)+outVars_d%rh(nDay))*86400000
                     mc_itime_reco_d = mc_itime_reco_d + 1
                 endif
             endif
@@ -1040,7 +909,7 @@ spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
                     vars4MCMC%gpp_h%mdData(mc_itime_gpp_h, 1) = mc_iyear
                     vars4MCMC%gpp_h%mdData(mc_itime_gpp_h, 2) = mc_iday
                     vars4MCMC%gpp_h%mdData(mc_itime_gpp_h, 3) = mc_ihour
-                    vars4MCMC%gpp_h%mdData(mc_itime_gpp_h, 4) = outVars_h%gpp*3600000
+                    vars4MCMC%gpp_h%mdData(mc_itime_gpp_h, 4) = outVars_h%gpp(nHr)*3600000
                     mc_itime_gpp_h = mc_itime_gpp_h + 1
                 endif
             endif
@@ -1058,7 +927,7 @@ spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
                     vars4MCMC%nee_h%mdData(mc_itime_nee_h, 1) = mc_iyear
                     vars4MCMC%nee_h%mdData(mc_itime_nee_h, 2) = mc_iday
                     vars4MCMC%nee_h%mdData(mc_itime_nee_h, 3) = mc_ihour
-                    vars4MCMC%nee_h%mdData(mc_itime_nee_h, 4) = outVars_h%nbp*3600000
+                    vars4MCMC%nee_h%mdData(mc_itime_nee_h, 4) = outVars_h%nee(nHr)*3600000
                     mc_itime_nee_h = mc_itime_nee_h + 1
                 endif
             endif
@@ -1077,7 +946,7 @@ spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
                     vars4MCMC%reco_h%mdData(mc_itime_reco_h, 1) = mc_iyear
                     vars4MCMC%reco_h%mdData(mc_itime_reco_h, 2) = mc_iday
                     vars4MCMC%reco_h%mdData(mc_itime_reco_h, 3) = mc_ihour
-                    vars4MCMC%reco_h%mdData(mc_itime_reco_h, 4) = (outVars_h%rh + outVars_h%ra)*3600000
+                    vars4MCMC%reco_h%mdData(mc_itime_reco_h, 4) = (outVars_h%rh(nHr) + outVars_h%ra(nHr))*3600000
                     mc_itime_reco_h = mc_itime_reco_h + 1
                 endif
             endif
@@ -1096,7 +965,7 @@ spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
                     vars4MCMC%ch4_h%mdData(mc_itime_ch4_h, 1) = mc_iyear
                     vars4MCMC%ch4_h%mdData(mc_itime_ch4_h, 2) = mc_iday
                     vars4MCMC%ch4_h%mdData(mc_itime_ch4_h, 3) = mc_ihour
-                    vars4MCMC%ch4_h%mdData(mc_itime_ch4_h, 4) = sum(in_vegn%CH4)*3600000
+                    vars4MCMC%ch4_h%mdData(mc_itime_ch4_h, 4) = sum(outVars_h%CH4(nHr,:))*3600000
                     mc_itime_ch4_h = mc_itime_ch4_h + 1
                 endif
             endif
@@ -1115,7 +984,7 @@ spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
                     vars4MCMC%cleaf%mdData(mc_itime_cleaf, 1) = mc_iyear
                     vars4MCMC%cleaf%mdData(mc_itime_cleaf, 2) = mc_iday
                     vars4MCMC%cleaf%mdData(mc_itime_cleaf, 3) = mc_ihour
-                    vars4MCMC%cleaf%mdData(mc_itime_cleaf, 4) = QC(1) 
+                    vars4MCMC%cleaf%mdData(mc_itime_cleaf, 4) = outVars_h%cLeaf(nHr) 
                     mc_itime_cleaf = mc_itime_cleaf + 1
                 endif
             endif
@@ -1133,115 +1002,87 @@ spec%la0     = in_params%la0        ! in plant growht la0     = 0.2
                     vars4MCMC%cwood%mdData(mc_itime_cwood, 1) = mc_iyear
                     vars4MCMC%cwood%mdData(mc_itime_cwood, 2) = mc_iday
                     vars4MCMC%cwood%mdData(mc_itime_cwood, 3) = mc_ihour
-                    vars4MCMC%cwood%mdData(mc_itime_cwood, 4) = QC(2)
+                    vars4MCMC%cwood%mdData(mc_itime_cwood, 4) = outVars_h%cStem(nHr)
                     mc_itime_cwood = mc_itime_cwood + 1
                 endif
             endif
         endif
 
-        ! anpp_y
-        if(vars4MCMC%anpp_y%existOrNot)then
-            if(mc_itime_anpp_y <= size(vars4MCMC%anpp_y%obsData, dim=1)) then
-                do while(vars4MCMC%anpp_y%obsData(mc_itime_anpp_y, 1) .lt. forcing(1)%year)
-                    vars4MCMC%anpp_y%mdData(mc_itime_anpp_y, 4) = -9999
-                    mc_itime_anpp_y = mc_itime_anpp_y + 1
-                enddo
-                if (vars4MCMC%anpp_y%obsData(mc_itime_anpp_y, 2) .lt. 0) then 
-                    vars4MCMC%anpp_y%obsData(mc_itime_anpp_y, 2) = 365
-                endif
-                if(vars4MCMC%anpp_y%obsData(mc_itime_anpp_y, 1) .eq. mc_iyear .and. &
-                vars4MCMC%anpp_y%obsData(mc_itime_anpp_y, 2) .eq. mc_iday  .and. &
-                vars4MCMC%anpp_y%obsData(mc_itime_anpp_y, 3) .eq. mc_ihour) then
-                    vars4MCMC%anpp_y%mdData(mc_itime_anpp_y, 1) = mc_iyear
-                    vars4MCMC%anpp_y%mdData(mc_itime_anpp_y, 2) = mc_iday
-                    vars4MCMC%anpp_y%mdData(mc_itime_anpp_y, 3) = mc_ihour
-                    vars4MCMC%anpp_y%mdData(mc_itime_anpp_y, 4) = (outVars_y%nppLeaf + outVars_y%nppStem)*3600000*365*24
-                    mc_itime_anpp_y = mc_itime_anpp_y + 1
+        npft = count_pft
+        do ipft = 1, npft
+            ! anpp_y
+            if(vars4MCMC%spec_vars(ipft)%anpp_y%existOrNot)then
+                if(mc_itime_anpp_y <= size(vars4MCMC%spec_vars(ipft)%anpp_y%obsData, dim=1)) then
+                    do while(vars4MCMC%spec_vars(ipft)%anpp_y%obsData(mc_itime_anpp_y, 1) .lt. forcing(1)%year)
+                        vars4MCMC%spec_vars(ipft)%anpp_y%mdData(mc_itime_anpp_y, 4) = -9999
+                        mc_itime_anpp_y = mc_itime_anpp_y + 1
+                    enddo
+                    if (vars4MCMC%spec_vars(ipft)%anpp_y%obsData(mc_itime_anpp_y, 2) .lt. 0) then 
+                        vars4MCMC%spec_vars(ipft)%anpp_y%obsData(mc_itime_anpp_y, 2) = 365
+                    endif
+                    if(vars4MCMC%spec_vars(ipft)%anpp_y%obsData(mc_itime_anpp_y, 1) .eq. mc_iyear .and. &
+                    vars4MCMC%spec_vars(ipft)%anpp_y%obsData(mc_itime_anpp_y, 2) .eq. mc_iday  .and. &
+                    vars4MCMC%spec_vars(ipft)%anpp_y%obsData(mc_itime_anpp_y, 3) .eq. mc_ihour) then
+                        vars4MCMC%spec_vars(ipft)%anpp_y%mdData(mc_itime_anpp_y, 1) = mc_iyear
+                        vars4MCMC%spec_vars(ipft)%anpp_y%mdData(mc_itime_anpp_y, 2) = mc_iday
+                        vars4MCMC%spec_vars(ipft)%anpp_y%mdData(mc_itime_anpp_y, 3) = mc_ihour
+                        if (ipft == 3)then ! shagnum
+                            vars4MCMC%spec_vars(ipft)%anpp_y%mdData(mc_itime_anpp_y, 4) = &
+                                (outVars_y%allSpec(ipft)%nppLeaf(nYr) + &
+                                outVars_y%allSpec(ipft)%nppStem(nYr) + &
+                                outVars_y%allSpec(ipft)%nppRoot(nYr))*3600000*365*24
+                        else
+                            vars4MCMC%spec_vars(ipft)%anpp_y%mdData(mc_itime_anpp_y, 4) = &
+                                (outVars_y%allSpec(ipft)%nppLeaf(nYr) + &
+                                outVars_y%allSpec(ipft)%nppStem(nYr))*3600000*365*24
+                        endif
+                        mc_itime_anpp_y = mc_itime_anpp_y + 1
+                    endif
                 endif
             endif
-        endif
 
-        ! bnpp_y
-        if(vars4MCMC%bnpp_y%existOrNot)then
-            if(mc_itime_bnpp_y <= size(vars4MCMC%bnpp_y%obsData, dim=1)) then
-                do while(vars4MCMC%bnpp_y%obsData(mc_itime_bnpp_y, 1) .lt. forcing(1)%year)
-                    vars4MCMC%bnpp_y%mdData(mc_itime_bnpp_y, 4) = -9999
-                    mc_itime_bnpp_y = mc_itime_bnpp_y + 1
-                enddo
-                if (vars4MCMC%bnpp_y%obsData(mc_itime_bnpp_y, 2) .lt. 0) then 
-                    vars4MCMC%bnpp_y%obsData(mc_itime_bnpp_y, 2) = 365
-                endif
-                if(vars4MCMC%bnpp_y%obsData(mc_itime_bnpp_y, 1) .eq. mc_iyear .and. &
-                vars4MCMC%bnpp_y%obsData(mc_itime_bnpp_y, 2) .eq. mc_iday  .and. &
-                vars4MCMC%bnpp_y%obsData(mc_itime_bnpp_y, 3) .eq. mc_ihour) then
-                    vars4MCMC%bnpp_y%mdData(mc_itime_bnpp_y, 1) = mc_iyear
-                    vars4MCMC%bnpp_y%mdData(mc_itime_bnpp_y, 2) = mc_iday
-                    vars4MCMC%bnpp_y%mdData(mc_itime_bnpp_y, 3) = mc_ihour
-                    vars4MCMC%bnpp_y%mdData(mc_itime_bnpp_y, 4) = outVars_y%nppRoot*3600000*365*24
-                    mc_itime_bnpp_y = mc_itime_bnpp_y + 1
+            ! bnpp_y
+            if(vars4MCMC%spec_vars(ipft)%bnpp_y%existOrNot)then
+                if(mc_itime_bnpp_y <= size(vars4MCMC%spec_vars(ipft)%bnpp_y%obsData, dim=1)) then
+                    do while(vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(mc_itime_bnpp_y, 1) .lt. forcing(1)%year)
+                        vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(mc_itime_bnpp_y, 4) = -9999
+                        mc_itime_bnpp_y = mc_itime_bnpp_y + 1
+                    enddo
+                    if (vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(mc_itime_bnpp_y, 2) .lt. 0) then 
+                        vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(mc_itime_bnpp_y, 2) = 365
+                    endif
+                    if(vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(mc_itime_bnpp_y, 1) .eq. mc_iyear .and. &
+                    vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(mc_itime_bnpp_y, 2) .eq. mc_iday  .and. &
+                    vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(mc_itime_bnpp_y, 3) .eq. mc_ihour) then
+                        vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(mc_itime_bnpp_y, 1) = mc_iyear
+                        vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(mc_itime_bnpp_y, 2) = mc_iday
+                        vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(mc_itime_bnpp_y, 3) = mc_ihour
+                        vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(mc_itime_bnpp_y, 4) = &
+                            outVars_y%allSpec(ipft)%nppRoot(nYr)*3600000*365*24
+                        mc_itime_bnpp_y = mc_itime_bnpp_y + 1
+                    endif
                 endif
             endif
-        endif
 
-        ! lai_h
-        if(vars4MCMC%lai_h%existOrNot)then
-            if(mc_itime_lai_h <= size(vars4MCMC%lai_h%obsData, dim=1)) then
-                do while(vars4MCMC%lai_h%obsData(mc_itime_lai_h, 1) .lt. forcing(1)%year)
-                    vars4MCMC%lai_h%mdData(mc_itime_lai_h, 4) = -9999
-                    mc_itime_lai_h = mc_itime_lai_h + 1
-                enddo
-                if(vars4MCMC%lai_h%obsData(mc_itime_lai_h, 1) .eq. mc_iyear .and. &
-                vars4MCMC%lai_h%obsData(mc_itime_lai_h, 2) .eq. mc_iday  .and. &
-                vars4MCMC%lai_h%obsData(mc_itime_lai_h, 3) .eq. mc_ihour) then
-                    vars4MCMC%lai_h%mdData(mc_itime_lai_h, 1) = mc_iyear
-                    vars4MCMC%lai_h%mdData(mc_itime_lai_h, 2) = mc_iday
-                    vars4MCMC%lai_h%mdData(mc_itime_lai_h, 3) = mc_ihour
-                    vars4MCMC%lai_h%mdData(mc_itime_lai_h, 4) = outVars_h%lai
-                    mc_itime_lai_h = mc_itime_lai_h + 1
+            ! lai_h
+            if(vars4MCMC%spec_vars(ipft)%lai_h%existOrNot)then
+                if(mc_itime_lai_h <= size(vars4MCMC%spec_vars(ipft)%lai_h%obsData, dim=1)) then
+                    do while(vars4MCMC%spec_vars(ipft)%lai_h%obsData(mc_itime_lai_h, 1) .lt. forcing(1)%year)
+                        vars4MCMC%spec_vars(ipft)%lai_h%mdData(mc_itime_lai_h, 4) = -9999
+                        mc_itime_lai_h = mc_itime_lai_h + 1
+                    enddo
+                    if(vars4MCMC%spec_vars(ipft)%lai_h%obsData(mc_itime_lai_h, 1) .eq. mc_iyear .and. &
+                    vars4MCMC%spec_vars(ipft)%lai_h%obsData(mc_itime_lai_h, 2) .eq. mc_iday  .and. &
+                    vars4MCMC%spec_vars(ipft)%lai_h%obsData(mc_itime_lai_h, 3) .eq. mc_ihour) then
+                        vars4MCMC%spec_vars(ipft)%lai_h%mdData(mc_itime_lai_h, 1) = mc_iyear
+                        vars4MCMC%spec_vars(ipft)%lai_h%mdData(mc_itime_lai_h, 2) = mc_iday
+                        vars4MCMC%spec_vars(ipft)%lai_h%mdData(mc_itime_lai_h, 3) = mc_ihour
+                        vars4MCMC%spec_vars(ipft)%lai_h%mdData(mc_itime_lai_h, 4) = outVars_h%allSpec(ipft)%lai(nHr)
+                        mc_itime_lai_h = mc_itime_lai_h + 1
+                    endif
                 endif
             endif
-        endif
-
-        ! npp_y
-        if(vars4MCMC%npp_y%existOrNot)then
-            if(mc_itime_npp_y <= size(vars4MCMC%npp_y%obsData, dim=1)) then
-                do while(vars4MCMC%npp_y%obsData(mc_itime_npp_y, 1) .lt. forcing(1)%year)
-                    vars4MCMC%npp_y%mdData(mc_itime_npp_y, 4) = -9999
-                    mc_itime_npp_y = mc_itime_npp_y + 1
-                enddo
-                if (vars4MCMC%npp_y%obsData(mc_itime_npp_y, 2) .lt. 0) then 
-                    vars4MCMC%npp_y%obsData(mc_itime_npp_y, 2) = 365
-                endif
-                if(vars4MCMC%npp_y%obsData(mc_itime_npp_y, 1) .eq. mc_iyear .and. &
-                vars4MCMC%npp_y%obsData(mc_itime_npp_y, 2) .eq. mc_iday  .and. &
-                vars4MCMC%npp_y%obsData(mc_itime_npp_y, 3) .eq. mc_ihour) then
-                    vars4MCMC%npp_y%mdData(mc_itime_npp_y, 1) = mc_iyear
-                    vars4MCMC%npp_y%mdData(mc_itime_npp_y, 2) = mc_iday
-                    vars4MCMC%npp_y%mdData(mc_itime_npp_y, 3) = mc_ihour
-                    vars4MCMC%npp_y%mdData(mc_itime_npp_y, 4) = outVars_y%npp*3600000*365*24
-                    mc_itime_npp_y = mc_itime_npp_y + 1
-                endif
-            endif
-        endif
-
-        ! reco_y
-        if(vars4MCMC%reco_y%existOrNot)then
-            if(mc_itime_reco_y <= size(vars4MCMC%reco_y%obsData, dim=1)) then
-                do while(vars4MCMC%reco_y%obsData(mc_itime_reco_y, 1) .lt. forcing(1)%year)
-                    vars4MCMC%reco_y%mdData(mc_itime_reco_y, 4) = -9999
-                    mc_itime_reco_y = mc_itime_reco_y + 1
-                enddo
-                if(vars4MCMC%reco_y%obsData(mc_itime_reco_y, 1) .eq. mc_iyear .and. &
-                vars4MCMC%reco_y%obsData(mc_itime_reco_y, 2) .eq. mc_iday  .and. &
-                vars4MCMC%reco_y%obsData(mc_itime_reco_y, 3) .eq. mc_ihour) then
-                    vars4MCMC%reco_y%mdData(mc_itime_reco_y, 1) = mc_iyear
-                    vars4MCMC%reco_y%mdData(mc_itime_reco_y, 2) = mc_iday
-                    vars4MCMC%reco_y%mdData(mc_itime_reco_y, 3) = mc_ihour
-                    vars4MCMC%reco_y%mdData(mc_itime_reco_y, 4) = QC(2)
-                    mc_itime_reco_y = mc_itime_reco_y + 1
-                endif
-            endif
-        endif
+        enddo
            
     end subroutine GetSimuData
 

@@ -10,14 +10,30 @@ module mcmc
     ! real search_scale
 
     integer npar4DA, iDAsimu, upgraded, ipar, covexist
-    real, allocatable :: DAparmin(:), DAparmax(:), DApar(:), DApar_old(:)
-    integer, allocatable :: DAparidx(:)
-    real, allocatable :: MDparval(:), gamma(:,:), gamnew(:,:), coefhistory(:,:), coefnorm(:), coefac(:)
+    ! real, allocatable :: DAparmin(:), DAparmax(:), DApar(:), DApar_old(:)
+    type params_DApar
+        real, allocatable :: DAparmin(:)
+        real, allocatable :: DAparmax(:)
+        real, allocatable :: DApar(:)
+        real, allocatable :: DApar_old(:)
+        integer, allocatable :: DAparidx(:)
+        real, allocatable :: gamma(:,:)
+        real, allocatable :: gamnew(:,:)
+        real, allocatable :: coefhistory(:,:)
+        real, allocatable :: coefnorm(:)
+        real, allocatable :: coefac(:)
+    end type params_DApar
+    type(params_DApar), allocatable :: mc_DApar(:)
+    ! integer, allocatable :: DAparidx(:)
+    ! real, allocatable :: MDparval(:), gamma(:,:), gamnew(:,:), coefhistory(:,:), coefnorm(:), coefac(:)
     real fact_rejet
     real J_last, J_new, accept_rate
     integer new, reject
     logical do_cov2createNewPars
     ! integer, parameter :: nc = 100, ncov = 500
+
+    type(nml_params_data_type),allocatable     :: mc_in_params(:)
+    type(nml_initValue_data_type), allocatable :: mc_init_params(:)
 
     contains
     subroutine init_mcmc(files_vegn_params, vegn)
@@ -27,64 +43,68 @@ module mcmc
         ! different PFTs
         type(vegn_tile_type), intent(inout) :: vegn
         character(*), intent(in) :: files_vegn_params(:)
-        type(nml_params_data_type)    :: in_params
-        type(nml_initValue_data_type) :: init_params
+
         integer :: ipft, npft
         
+        npar = nSpecParams
         npft = size(files_vegn_params)
+        ! initilize the parameters and initial values in TECO model
         allocate(vegn%allSp(npft))
         vegn%npft = npft
 
-        allocate(parval(npft))
-        allocate(parmin(npft))
-        allocate(parmax(npft))
+        allocate(mc_parvals(npft))
+        allocate(mc_in_params(npft))
+        allocate(mc_init_params(npft))
 
         if(allocated(vegn%allSp)) then
             do ipft = 1, count_pft
+                allocate(mc_parvals(ipft)%parval(npar), mc_parvals(ipft)%parmin(npar), mc_parvals(ipft)%parmax(npar))
                 call readParamNml(adjustl(trim("configs/"//adjustl(trim(files_vegn_params(ipft))))), &
-                    in_params, init_params, parval(ipft), parmin(ipft), parmax(ipft))
-                call initilize_site(in_params, init_params)
-                call initilize_spec(vegn%allSp(ipft), in_params, init_params)
+                    mc_in_params(ipft), mc_init_params(ipft), &
+                    mc_parvals(ipft)%parval, mc_parvals(ipft)%parmin, mc_parvals(ipft)%parmax)
+                call initilize_site(mc_in_params(ipft), mc_init_params(ipft))  ! Jian: this version not separate the site parameters and pft parameters
+                call initilize_spec(vegn%allSp(ipft), mc_in_params(ipft), mc_init_params(ipft))
                 if (ipft .eq. 1) then
-                        vegn%LAImax = vegn%allSp(ipft)%LAImax
-                        vegn%LAImin = vegn%allSp(ipft)%LAImin
-                    else
-                        vegn%LAImax = AMAX1(vegn%LAImax, vegn%allSp(ipft)%LAImax)
-                        vegn%LAImin = AMAX1(vegn%LAImin, vegn%allSp(ipft)%LAImin)
-                    endif
-                enddo
+                    vegn%LAImax = vegn%allSp(ipft)%LAImax
+                    vegn%LAImin = vegn%allSp(ipft)%LAImin
+                else
+                    vegn%LAImax = AMAX1(vegn%LAImax, vegn%allSp(ipft)%LAImax)
+                    vegn%LAImin = AMAX1(vegn%LAImin, vegn%allSp(ipft)%LAImin)
+                endif
             enddo
-        endif
+        endif ! finish the initilize parameters and the mc_parvals
 
         ! read the observational data
         call readObsData() ! return a type array of vars4MCMC
 
         ! handle the parameters for MCMC
-        npar     = nSpecParams
+        allocate(mc_DApar(npft)) 
         allocate(temp_parmin(npar), temp_parmax(npar))  ! allocate the temporary parmin value
         allocate(temp_paridx(npar), temp_parval(npar))  ! mark the index of parameters for MCMC
-        allocate(MDparval(npar))                        ! record the parameters set for model simulation
+        ! allocate(MDparval(npar))                        ! record the parameters set for model simulation
+        ! MDparval = parval                               ! parameters for running model
+        do ipft = 1, npft
+            npar4DA  = 0 ! record the number of parameters for data assimilation
+            do ipar = 1, npar
+                if (mc_parvals(ipft)%parmin(ipar) .ne. mc_parvals(ipft)%parmax(ipar)) then
+                    npar4DA              = npar4DA + 1
+                    temp_paridx(npar4DA) = ipar
+                    temp_parmin(npar4DA) = mc_parvals(ipft)%parmin(ipar)
+                    temp_parmax(npar4DA) = mc_parvals(ipft)%parmax(ipar)
+                    temp_parval(npar4DA) = mc_parvals(ipft)%parval(ipar)
+                endif
+            enddo
+            allocate(mc_DApar(ipft)%DAparmin(npar4DA),  mc_DApar(ipft)%DAparmax(npar4DA), mc_DApar(ipft)%DApar(npar4DA), &
+                     mc_DApar(ipft)%DApar_old(npar4DA), mc_DApar(ipft)%DAparidx(npar4DA))
+            ! allocate(DAparmin(npar4DA), DAparmax(npar4DA), DAparidx(npar4DA))
+            ! allocate(DApar(npar4DA),    DApar_old(npar4DA))
 
-        MDparval = parval                               ! parameters for running model
-        npar4DA  = 0 ! record the number of parameters for data assimilation
-        do ipar = 1, npar
-            if (parmin(ipar) .ne. parmax(ipar)) then
-                npar4DA              = npar4DA + 1
-                temp_paridx(npar4DA) = ipar
-                temp_parmin(npar4DA) = parmin(ipar)
-                temp_parmax(npar4DA) = parmax(ipar)
-                temp_parval(npar4DA) = parval(ipar)
-            endif
+            mc_DApar(ipft)%DAparmin  = temp_parmin(:npar4DA)
+            mc_DApar(ipft)%DAparmax  = temp_parmax(:npar4DA)
+            mc_DApar(ipft)%DAparidx  = temp_paridx(:npar4DA)
+            mc_DApar(ipft)%DApar     = temp_parval(:npar4DA)
+            mc_DApar(ipft)%DApar_old = mc_DApar(ipft)%DApar   ! mark as old parameters
         enddo
-
-        allocate(DAparmin(npar4DA), DAparmax(npar4DA), DAparidx(npar4DA))
-        allocate(DApar(npar4DA),    DApar_old(npar4DA))
-
-        DAparmin  = temp_parmin(:npar4DA)
-        DAparmax  = temp_parmax(:npar4DA)
-        DAparidx  = temp_paridx(:npar4DA)
-        DApar     = temp_parval(:npar4DA)
-        DApar_old = DApar                   ! mark as old parameters
 
         deallocate(temp_parmin, temp_parmax, temp_parval, temp_paridx)
 
@@ -93,44 +113,62 @@ module mcmc
         fact_rejet    = 2.4/sqrt(real(npar4DA))
 
         ! record
-        allocate(coefhistory(ncov, npar4DA))
-        ! create the coefnorm for generating the new parameters
-        allocate(coefnorm(npar4DA)) 
-        allocate(coefac(npar4DA))
-        do ipar = 1, npar4DA
-            coefnorm(ipar) = 0.5
-            coefac(ipar)   = coefnorm(ipar)
+        do ipft = 1, npft
+            allocate(mc_DApar(ipft)%coefhistory(ncov, npar4DA))
+            ! create the coefnorm for generating the new parameters
+            allocate(mc_DApar(ipft)%coefnorm(npar4DA)) 
+            allocate(mc_DApar(ipft)%coefac(npar4DA))
+            do ipar = 1, npar4DA
+                mc_DApar(ipft)%coefnorm(ipar) = 0.5
+                mc_DApar(ipft)%coefac(ipar)   = mc_DApar(ipft)%coefnorm(ipar)
+            enddo
+            allocate(mc_DApar(ipft)%gamnew(npar4DA, npar4DA))
         enddo
-        allocate(gamnew(npar4DA, npar4DA))
         J_last = 900000.0
         ! init the outputs
         call init_mcmc_outputs(nDAsimu, npar4DA)
     end subroutine init_mcmc
 
-    subroutine run_mcmc()
+    subroutine run_mcmc(vegn)
         implicit none
-        integer temp_upgraded
+        type(vegn_tile_type), intent(inout) :: vegn
+        integer temp_upgraded, ipft, npft
         real rand
         
         print *, "# Start to run mcmc ..."
-
+        npft = count_pft
         call generate_newPar()
 
         do iDAsimu = 1, nDAsimu
             write(*,*) iDAsimu, "/", nDAsimu, J_last, J_new, upgraded, accept_rate
             call mcmc_functions_init()  ! initialize the mc_itime ... variables
-            call initialize()           ! initialize the TECO model 
-                   
+                
             ! generate parameters 
             call generate_newPar()
-            ! update the parameters
-            do ipar = 1, npar4DA
-                parval(DAparidx(ipar)) = DApar(ipar)
+            do ipft = 1, npft   
+                ! update the parameters
+                do ipar = 1, npar4DA
+                    mc_parvals(ipft)%parval(mc_DApar(ipft)%DAparidx(ipar)) = mc_DApar(ipft)%DApar(ipar)
+                enddo
+                call renewMDpars(mc_parvals(ipft)%parval, mc_in_params(ipft))          ! call update parameters in TECO model
             enddo
             
-            call renewMDpars()          ! call update parameters in TECO model
+            ! call initialize()           ! initialize the TECO model 
+            if(allocated(vegn%allSp)) then
+                do ipft = 1, count_pft
+                    call initilize_site(mc_in_params(ipft), mc_init_params(ipft))  ! Jian: this version not separate the site parameters and pft parameters
+                    call initilize_spec(vegn%allSp(ipft), mc_in_params(ipft), mc_init_params(ipft))
+                    if (ipft .eq. 1) then
+                        vegn%LAImax = vegn%allSp(ipft)%LAImax
+                        vegn%LAImin = vegn%allSp(ipft)%LAImin
+                    else
+                        vegn%LAImax = AMAX1(vegn%LAImax, vegn%allSp(ipft)%LAImax)
+                        vegn%LAImin = AMAX1(vegn%LAImin, vegn%allSp(ipft)%LAImin)
+                    endif
+                enddo
+            endif ! finish ! initialize the TECO model
 
-            call teco_simu()            ! run the model
+            call teco_simu(vegn)            ! run the model
             
             temp_upgraded = upgraded
             call costFuncObs()          ! calculate the cost between observations and simulations
@@ -139,98 +177,112 @@ module mcmc
             if (upgraded .gt. temp_upgraded) then
                 new =  new + 1  ! new is for what?
                 if (covexist .eq. 1)then
-                    coefac = coefnorm                           ! coefac is old parameter sets? coef is the new one; coefnorm 
-                    coefhistory(new, :) = coefnorm              ! coefhistory used to create new coef matrix
+                    do ipft = 1, npft
+                        mc_DApar(ipft)%coefac = mc_DApar(ipft)%coefnorm                           ! coefac is old parameter sets? coef is the new one; coefnorm 
+                        mc_DApar(ipft)%coefhistory(new, :) = mc_DApar(ipft)%coefnorm              ! coefhistory used to create new coef matrix
+                    enddo
                 else
-                    do ipar = 1, npar4DA
-                        coefnorm(ipar) = (DApar(ipar)-DAparmin(ipar))/(DAparmax(ipar)-DAparmin(ipar))
+                    do ipft = 1, npft
+                        do ipar = 1, npar4DA
+                            mc_DApar(ipft)%coefnorm(ipar) = (mc_DApar(ipft)%DApar(ipar)-mc_DApar(ipft)%DAparmin(ipar))&
+                                                           /(mc_DApar(ipft)%DAparmax(ipar)-mc_DApar(ipft)%DAparmin(ipar))
+                        enddo
                     enddo
                 endif
-                coefhistory(new, :) = coefnorm 
+                do ipft = 1, npft
+                    mc_DApar(ipft)%coefhistory(new, :) = mc_DApar(ipft)%coefnorm 
+                enddo
                 if(new .ge. ncov)new=0
                 ! update the parameters sets
-                tot_paramsets(upgraded,:) = DApar
+                do ipft = 1, npft
+                    arr_params_set(ipft)%tot_paramsets(upgraded,:) = mc_DApar(ipft)%DApar
+                enddo
                 if (do_mc_out_hr) then
-                    call mcmc_update_outputs(upgraded, tot_paramsets_outs_h, tot_outVars_h)
+                    call mcmc_update_outputs(upgraded, tot_paramsets_outs_h, outVars_h)
                 endif
                 if (do_mc_out_day)then
-                    call mcmc_update_outputs(upgraded, tot_paramsets_outs_d, tot_outVars_d)
+                    call mcmc_update_outputs(upgraded, tot_paramsets_outs_d, outVars_d)
                 endif
                 if (do_mc_out_mon) then
-                    call mcmc_update_outputs(upgraded, tot_paramsets_outs_m, tot_outVars_m)
+                    call mcmc_update_outputs(upgraded, tot_paramsets_outs_m, outVars_m)
                 endif
             else
                 reject = reject + 1
             endif
 
             ! updates of the covariance matrix
-            if (.not. do_cov2createNewPars .and. mod(upgraded, ncov).eq.0 .and. upgraded .ne. 0)then
-                do_cov2createNewPars = .True.
-                coefac   = coefnorm          ! coefnorm: normized values between min and max values
-                call varcov(coefhistory, gamnew, npar4DA, ncov) !
-                if(.not.(all(gamnew==0.)))then
-                    gamma = gamnew
-                    call racine_mat(gamma, gamnew, npar4DA)
-                    gamma = gamnew
+            do ipft = 1, npft
+                if (.not. do_cov2createNewPars .and. mod(upgraded, ncov).eq.0 .and. upgraded .ne. 0)then
+                    do_cov2createNewPars = .True.
+                    mc_DApar(ipft)%coefac   = mc_DApar(ipft)%coefnorm          ! coefnorm: normized values between min and max values
+                    call varcov(mc_DApar(ipft)%coefhistory, mc_DApar(ipft)%gamnew, npar4DA, ncov) !
+                    if(.not.(all(mc_DApar(ipft)%gamnew==0.)))then
+                        mc_DApar(ipft)%gamma = mc_DApar(ipft)%gamnew
+                        call racine_mat(mc_DApar(ipft)%gamma, mc_DApar(ipft)%gamnew, npar4DA)
+                        mc_DApar(ipft)%gamma = mc_DApar(ipft)%gamnew
+                    endif
                 endif
-            endif
 
-            if(mod(upgraded, ncov).eq.0 .and. covexist.eq.1 .and. upgraded .ne. 0)then
-                call varcov(coefhistory, gamnew, npar4DA, ncov)
-                if(.not.(all(gamnew==0.)))then
-                    gamma = gamnew
-                    call racine_mat(gamma, gamnew, npar4DA)
-                    gamma = gamnew
+                if(mod(upgraded, ncov).eq.0 .and. covexist.eq.1 .and. upgraded .ne. 0)then
+                    call varcov(mc_DApar(ipft)%coefhistory, mc_DApar(ipft)%gamnew, npar4DA, ncov)
+                    if(.not.(all(mc_DApar(ipft)%gamnew==0.)))then
+                        mc_DApar(ipft)%gamma = mc_DApar(ipft)%gamnew
+                        call racine_mat(mc_DApar(ipft)%gamma, mc_DApar(ipft)%gamnew, npar4DA)
+                        mc_DApar(ipft)%gamma = mc_DApar(ipft)%gamnew
+                    endif
                 endif
-            endif
+            enddo
         enddo
 
         ! summary
-        call mcmc_param_outputs(upgraded, npar4DA, parnames, DAparidx)
-
-        ! deallocate
-        deallocate(DAparmin)
-        deallocate(DAparmax)
-        deallocate(DAparidx)
-        deallocate(DApar)
+        call mcmc_param_outputs(upgraded, npar4DA, parnames, mc_DApar(ipft)%DAparidx)
     end subroutine run_mcmc
 
     subroutine generate_newPar()
         ! This subroutine is used to generate the new parameters to run MCMC
         ! Based on the Shuang's code, it need to use the coef to generate the new parameters.
         implicit none
-        integer igenPar, parflag
+        ! real, intent(in) :: par_old(:), par_min(:), par_max(:)
+        ! real, intent(inout) :: par_new(:) 
+        integer igenPar, parflag, ipft, npft
         real rand_harvest, rand
 
-        DApar_old = DApar                   ! mark as old parameters 
-        
+        ! DApar_old = DApar                   ! mark as old parameters 
+        npft = count_pft
         if (do_cov2createNewPars) then
-            parflag = 1                 ! mark
-            do while(parflag .gt. 0)    ! create the new coefnorm
-                ! create the new coefnorm based on old one of coefac
-                call gengaussvect(fact_rejet*gamma, coefac, coefnorm, npar4DA)          ! generate the new cov parameters
-                parflag = 0
-                do igenPar = 1, npar4DA                                                 ! check the cov 
-                    if(coefnorm(igenPar).lt.0. .or. coefnorm(igenPar).gt.1.)then
-                        parflag=parflag+1
-                        write(*,*)'out of range',parflag
-                    endif
+            do ipft = 1, npft
+                parflag = 1                 ! mark
+                do while(parflag .gt. 0)    ! create the new coefnorm
+                    ! create the new coefnorm based on old one of coefac
+                    call gengaussvect(fact_rejet*mc_DApar(ipft)%gamma, mc_DApar(ipft)%coefac, &
+                         mc_DApar(ipft)%coefnorm, npar4DA)          ! generate the new cov parameters
+                    parflag = 0
+                    do igenPar = 1, npar4DA                                                 ! check the cov 
+                        if(mc_DApar(ipft)%coefnorm(igenPar).lt.0. .or. mc_DApar(ipft)%coefnorm(igenPar).gt.1.)then
+                            parflag=parflag+1
+                            write(*,*)'out of range',parflag
+                        endif
+                    enddo
+                enddo
+                ! create the new parameters from 
+                do ipar = 1, npar4DA
+                    mc_DApar(ipft)%DApar(ipar) = mc_DApar(ipft)%DAparmin(ipar) + &
+                        mc_DApar(ipft)%coefnorm(ipar) * (mc_DApar(ipft)%DAparmax(ipar)-mc_DApar(ipft)%DAparmin(ipar))
                 enddo
             enddo
-            ! create the new parameters from 
-            do ipar = 1, npar4DA
-                DApar(ipar) = DAparmin(ipar) + coefnorm(ipar) * (DAparmax(ipar)-DAparmin(ipar))
-            enddo
         else ! do not run cov to create new parameters, just random selections
-            do igenPar = 1, npar4DA     ! for each parameters
-999             continue
-                call random_number(rand_harvest)    
-                rand = rand_harvest - 0.5           ! create a random number in [-0.5, 0.5]
-                DApar(igenPar) = DApar_old(igenPar) + rand*(DAparmax(igenPar) - DAparmin(igenPar)) * search_scale   ! create new parameter
-                if((DApar(igenPar) .gt. DAparmax(igenPar)) &
-                    &   .or. (DApar(igenPar) .lt. DAparmin(igenPar))) then 
-                    goto 999                  ! judge the range of new parameter
-                endif
+            do ipft = 1, npft
+                do igenPar = 1, npar4DA     ! for each parameters
+    999             continue
+                    call random_number(rand_harvest)    
+                    rand = rand_harvest - 0.5           ! create a random number in [-0.5, 0.5]
+                    mc_DApar(ipft)%DApar(igenPar) = mc_DApar(ipft)%DApar_old(igenPar) + &
+                        rand*(mc_DApar(ipft)%DAparmax(igenPar) - mc_DApar(ipft)%DAparmin(igenPar)) * search_scale   ! create new parameter
+                    if((mc_DApar(ipft)%DApar(igenPar) .gt. mc_DApar(ipft)%DAparmax(igenPar)) &
+                        &   .or. (mc_DApar(ipft)%DApar(igenPar) .lt. mc_DApar(ipft)%DAparmin(igenPar))) then 
+                        goto 999                  ! judge the range of new parameter
+                    endif
+                enddo
             enddo
         endif
         return   ! mainly return the DApar, meanwhile update the coefnorm
@@ -239,6 +291,7 @@ module mcmc
     subroutine costFuncObs()
         implicit none
         real J_cost, delta_J, cs_rand
+        integer :: ipft, npft
         J_new = 0
         ! vars4MCMC
         ! gpp_d
@@ -315,43 +368,34 @@ module mcmc
         ! write(*,*)vars4MCMC%anpp_y%mdData(:,4)
         !     write(*,*)vars4MCMC%anpp_y%obsData(:,4)
         !     write(*,*)vars4MCMC%anpp_y%obsData(:,5)
-        if(vars4MCMC%anpp_y%existOrNot)then
-            call CalculateCost(vars4MCMC%anpp_y%mdData(:,4), vars4MCMC%anpp_y%obsData(:,4),&
-                 vars4MCMC%anpp_y%obsData(:,5), J_cost)
-            J_new = J_new + J_cost/2000
-        endif
-        ! write(*,*) "here10",J_new
 
-        ! bnpp_y
-        if(vars4MCMC%bnpp_y%existOrNot)then
-            call CalculateCost(vars4MCMC%bnpp_y%mdData(:,4), vars4MCMC%bnpp_y%obsData(:,4),&
-                 vars4MCMC%bnpp_y%obsData(:,5), J_cost)
-            J_new = J_new + J_cost/100
-        endif
-        ! write(*,*) "here9",J_new
-        ! lai_h
-        if(vars4MCMC%lai_h%existOrNot)then
-            call CalculateCost(vars4MCMC%lai_h%mdData(:,4), vars4MCMC%lai_h%obsData(:,4),&
-                 vars4MCMC%lai_h%obsData(:,5), J_cost)
-            J_new = J_new + J_cost
-        endif
-        ! write(*,*) "here8",J_new
-        ! npp_y
-        ! write(*,*)vars4MCMC%npp_y%mdData(:,4)
-        !     write(*,*)vars4MCMC%npp_y%obsData(:,4)
-        !     write(*,*)vars4MCMC%npp_y%obsData(:,5)
-        if(vars4MCMC%npp_y%existOrNot)then
-            call CalculateCost(vars4MCMC%npp_y%mdData(:,4), vars4MCMC%npp_y%obsData(:,4),&
-                 vars4MCMC%npp_y%obsData(:,5), J_cost)
-            J_new = J_new + J_cost/1000
-        endif
-        ! write(*,*) "here7",J_new
-        ! reco_y
-        if(vars4MCMC%reco_y%existOrNot)then
-            call CalculateCost(vars4MCMC%reco_y%mdData(:,4), vars4MCMC%reco_y%obsData(:,4),&
-                 vars4MCMC%reco_y%obsData(:,5), J_cost)
-            J_new = J_new + J_cost
-        endif
+        npft = count_pft
+        do ipft = 1, npft
+            if(vars4MCMC%spec_vars(ipft)%anpp_y%existOrNot)then
+                call CalculateCost(vars4MCMC%spec_vars(ipft)%anpp_y%mdData(:,4), &
+                    vars4MCMC%spec_vars(ipft)%anpp_y%obsData(:,4),&
+                    vars4MCMC%spec_vars(ipft)%anpp_y%obsData(:,5), J_cost)
+                J_new = J_new + J_cost/2000
+            endif
+            ! write(*,*) "here10",J_new
+
+            ! bnpp_y
+            if(vars4MCMC%spec_vars(ipft)%bnpp_y%existOrNot)then
+                call CalculateCost(vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(:,4), &
+                    vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(:,4),&
+                    vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(:,5), J_cost)
+                J_new = J_new + J_cost/100
+            endif
+            ! write(*,*) "here9",J_new
+            ! lai_h
+            if(vars4MCMC%spec_vars(ipft)%lai_h%existOrNot)then
+                call CalculateCost(vars4MCMC%spec_vars(ipft)%lai_h%mdData(:,4), &
+                    vars4MCMC%spec_vars(ipft)%lai_h%obsData(:,4),&
+                    vars4MCMC%spec_vars(ipft)%lai_h%obsData(:,5), J_cost)
+                J_new = J_new + J_cost
+            endif
+        enddo
+        ! ------------------------------------------------------------------------------------
         ! write(*,*) "here2",J_new
         if(J_new .eq. 0) then ! no data is available
             delta_J = -0.1
@@ -625,16 +669,38 @@ module mcmc
     subroutine deallocate_mcmc()
     ! deallocate some variables and summary the information of MCMC
         implicit none
-        if(allocated(DAparmin)) deallocate(DAparmin)
-        if(allocated(DAparmax)) deallocate(DAparmax)
-        if(allocated(DAparidx)) deallocate(DAparidx)
-        if(allocated(DApar)) deallocate(DApar)
-        if(allocated(DApar_old)) deallocate(DApar_old)
-        if(allocated(MDparval)) deallocate(MDparval)
+        integer :: ipft, npft
+        
+        
 
-        if(allocated(parval)) deallocate(parval)
-        if(allocated(parmin)) deallocate(parmin)
-        if(allocated(parmax)) deallocate(parmax)
+        if(allocated(mc_parvals)) then
+            npft = size(mc_parvals)
+            do ipft = 1, npft
+                if(allocated(mc_parvals(ipft)%parval)) deallocate(mc_parvals(ipft)%parval)
+                if(allocated(mc_parvals(ipft)%parmin)) deallocate(mc_parvals(ipft)%parmin)
+                if(allocated(mc_parvals(ipft)%parmax)) deallocate(mc_parvals(ipft)%parmax)
+            enddo
+            deallocate(mc_parvals)
+        endif
+
+        ! if(allocated(MDparval)) deallocate(MDparval)
+        if(allocated(mc_DApar)) then
+            npft = size(mc_DApar)
+            do ipft = 1, npft
+                if(allocated(mc_DApar(ipft)%DAparmin))  deallocate(mc_DApar(ipft)%DAparmin)
+                if(allocated(mc_DApar(ipft)%DAparmax))  deallocate(mc_DApar(ipft)%DAparmax)
+                if(allocated(mc_DApar(ipft)%DAparidx))  deallocate(mc_DApar(ipft)%DAparidx)
+                if(allocated(mc_DApar(ipft)%DApar))     deallocate(mc_DApar(ipft)%DApar)
+                if(allocated(mc_DApar(ipft)%DApar_old)) deallocate(mc_DApar(ipft)%DApar_old)
+
+                if(allocated(mc_DApar(ipft)%coefhistory)) deallocate(mc_DApar(ipft)%coefhistory)
+                if(allocated(mc_DApar(ipft)%coefnorm))    deallocate(mc_DApar(ipft)%coefnorm)
+                if(allocated(mc_DApar(ipft)%coefac))      deallocate(mc_DApar(ipft)%coefac)
+        
+                if(allocated(mc_DApar(ipft)%gamnew))   deallocate(mc_DApar(ipft)%gamnew)
+            enddo
+            deallocate(mc_DApar)
+        endif
         
         if(allocated(vars4MCMC%gpp_d%obsData))  deallocate(vars4MCMC%gpp_d%obsData)
         if(allocated(vars4MCMC%nee_d%obsData))  deallocate(vars4MCMC%nee_d%obsData)
@@ -646,12 +712,6 @@ module mcmc
         if(allocated(vars4MCMC%cleaf%obsData))  deallocate(vars4MCMC%cleaf%obsData)
         if(allocated(vars4MCMC%cwood%obsData))  deallocate(vars4MCMC%cwood%obsData)
 
-        if(allocated(vars4MCMC%anpp_y%obsData))  deallocate(vars4MCMC%anpp_y%obsData)
-        if(allocated(vars4MCMC%bnpp_y%obsData))  deallocate(vars4MCMC%bnpp_y%obsData)
-        if(allocated(vars4MCMC%lai_h%obsData))  deallocate(vars4MCMC%lai_h%obsData)
-        if(allocated(vars4MCMC%npp_y%obsData))  deallocate(vars4MCMC%npp_y%obsData)
-        if(allocated(vars4MCMC%reco_y%obsData))  deallocate(vars4MCMC%reco_y%obsData)
-
         if(allocated(vars4MCMC%gpp_d%mdData))  deallocate(vars4MCMC%gpp_d%mdData)
         if(allocated(vars4MCMC%nee_d%mdData))  deallocate(vars4MCMC%nee_d%mdData)
         if(allocated(vars4MCMC%reco_d%mdData)) deallocate(vars4MCMC%reco_d%mdData)
@@ -662,23 +722,37 @@ module mcmc
         if(allocated(vars4MCMC%cleaf%mdData))  deallocate(vars4MCMC%cleaf%mdData)
         if(allocated(vars4MCMC%cwood%mdData))  deallocate(vars4MCMC%cwood%mdData)
 
-        if(allocated(vars4MCMC%anpp_y%mdData))  deallocate(vars4MCMC%anpp_y%mdData)
-        if(allocated(vars4MCMC%bnpp_y%mdData))  deallocate(vars4MCMC%bnpp_y%mdData)
-        if(allocated(vars4MCMC%lai_h%mdData))  deallocate(vars4MCMC%lai_h%mdData)
-        if(allocated(vars4MCMC%npp_y%mdData))  deallocate(vars4MCMC%npp_y%mdData)
-        if(allocated(vars4MCMC%reco_y%mdData))  deallocate(vars4MCMC%reco_y%mdData)
+        do ipft = 1, npft
+            if(allocated(vars4MCMC%spec_vars(ipft)%anpp_y%obsData)) then
+                deallocate(vars4MCMC%spec_vars(ipft)%anpp_y%obsData)
+            endif
+            if(allocated(vars4MCMC%spec_vars(ipft)%bnpp_y%obsData)) then
+                deallocate(vars4MCMC%spec_vars(ipft)%bnpp_y%obsData)
+            endif
+            if(allocated(vars4MCMC%spec_vars(ipft)%lai_h%obsData)) then
+                deallocate(vars4MCMC%spec_vars(ipft)%lai_h%obsData)
+            endif
+            if(allocated(vars4MCMC%spec_vars(ipft)%anpp_y%mdData)) then 
+                deallocate(vars4MCMC%spec_vars(ipft)%anpp_y%mdData)
+            endif
+            if(allocated(vars4MCMC%spec_vars(ipft)%bnpp_y%mdData))  then
+                deallocate(vars4MCMC%spec_vars(ipft)%bnpp_y%mdData)
+            endif
+            if(allocated(vars4MCMC%spec_vars(ipft)%lai_h%mdData))  then
+                deallocate(vars4MCMC%spec_vars(ipft)%lai_h%mdData)
+            endif
+        enddo
+        if(allocated(vars4MCMC%spec_vars)) deallocate(vars4MCMC%spec_vars) 
 
-
-        if(allocated(coefhistory)) deallocate(coefhistory)
-        if(allocated(coefnorm))    deallocate(coefnorm)
-        if(allocated(coefac))      deallocate(coefac)
-
-        if(allocated(gamnew))   deallocate(gamnew)
         if(allocated(parnames)) deallocate(parnames)
 
         ! in MCMC_outputs module
-        if(allocated(tot_paramsets)) deallocate(tot_paramsets)
-        if(allocated(sel_paramsets)) deallocate(sel_paramsets)
+        do ipft = 1, npft
+            if(allocated(arr_params_set(ipft)%tot_paramsets)) deallocate(arr_params_set(ipft)%tot_paramsets)
+            if(allocated(arr_params_set(ipft)%sel_paramsets)) deallocate(arr_params_set(ipft)%sel_paramsets)
+        enddo
+        if(allocated(arr_params_set)) deallocate(arr_params_set)
+
         if (do_mc_out_hr)then
             call deallocate_mcmc_outs_type(sel_paramsets_outs_h)
             call deallocate_mcmc_outs_type(tot_paramsets_outs_h)

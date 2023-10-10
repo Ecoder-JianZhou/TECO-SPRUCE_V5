@@ -54,6 +54,8 @@ module datatypes
     real :: CO2treat = 0.        ! CO2 treatmant, up to CO2treat, not add to Ca. CO2
     real :: N_fert   = 0.        ! 5.6 ! (11.2 gN m-2 yr-1, in spring, Duke Forest FACE)
     ! ---------------------------------------------------------------------------------------
+    integer :: nHours, nDays, nMonths, nYears
+    ! --------------------------
     
     integer, parameter :: nlayers = 10                ! how many
     real,    parameter :: pi      = 3.1415926

@@ -5,6 +5,7 @@ module driver
     use soil
     use transfer
     use update_and_summary
+    use mcmc_mod
 
     implicit none
 
@@ -284,7 +285,7 @@ module driver
                 iTotDaily = iTotDaily + 1 
             end if
             
-            if (do_mcmc) call GetSimuData(iyear, iday, ihour, vegn, st)
+            if (do_mcmc) call GetSimuData(iyear, iday, ihour, vegn, iclim, iTotDaily, iTotMonthly, iTotYearly)
                  
             if (iclim < nforcing)then
                 if (forcing(iclim+1)%year>iyear) then            
