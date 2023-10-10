@@ -61,8 +61,8 @@ module mcmc_mod
     ! c pools
     character(500) :: obsfile_cleaf, obsfile_cwood 
 
-    character(500) :: obsfile_anpp_y, obsfile_bnpp_y 
-    character(500) :: obsfile_lai_h, obsfile_npp_y, obsfile_reco_y 
+    character(500) :: obsfile_anpp_y(3), obsfile_bnpp_y
+    character(500) :: obsfile_lai_h(3)
 
     ! variables for calculating the cost in MCMC processes
     type interCostVariable
@@ -75,7 +75,7 @@ module mcmc_mod
     type spec_interCostVariable
         ! for different species
         type(interCostVariable) :: anpp_y
-        type(interCostVariable) :: bnpp_y
+        ! type(interCostVariable) :: bnpp_y
         type(interCostVariable) :: lai_h
     end type spec_interCostVariable
 
@@ -93,6 +93,8 @@ module mcmc_mod
         ! c pools
         type(interCostVariable) :: cleaf    ! foliage
         type(interCostVariable) :: cwood
+        ! BNPP
+        type(interCostVariable) :: bnpp_y
         type(spec_interCostVariable), allocatable :: spec_vars(:)
     end type allCostVariables
 
@@ -133,6 +135,7 @@ module mcmc_mod
 
     subroutine readConfsNml()
         integer ipft, npft
+        integer io
         character(20) :: parnames_1, parnames_2, parnames_3, parnames_4, parnames_5 
         character(20) :: parnames_6, parnames_7, parnames_8, parnames_9, parnames_10
 
@@ -154,7 +157,7 @@ module mcmc_mod
         namelist /nml_obsfiles/ obsfile_gpp_d, obsfile_nee_d, obsfile_reco_d, &
                 obsfile_gpp_h, obsfile_nee_h, obsfile_reco_h, obsfile_ch4_h, &
                 obsfile_cleaf, obsfile_cwood, obsfile_anpp_y, obsfile_bnpp_y, & 
-                obsfile_lai_h, obsfile_npp_y, obsfile_reco_y 
+                obsfile_lai_h
 
         namelist /nml_param_names/parnames_1, parnames_2, parnames_3, parnames_4, parnames_5, & 
                 parnames_6, parnames_7, parnames_8, parnames_9, parnames_10, &
@@ -172,10 +175,12 @@ module mcmc_mod
         namelist /nml_mcmc_settings/ nDAsimu, search_scale, ncov, nRand, &
                 do_mc_out_hr, do_mc_out_day, do_mc_out_mon, do_mc_out_yr, nSpecParams
 
-        open(145, file=mcmc_configfile)
-        read(145, nml=nml_mcmc_settings)
-        read(145, nml=nml_obsfiles)
-        read(145, nml=nml_param_names)
+        allocate(parnames(60))
+        print *, "mcmc_configfile: ", adjustl(trim("configs/"))//adjustl(trim(mcmc_configfile))
+        open(145, file=adjustl(trim("configs/"))//adjustl(trim(mcmc_configfile)))
+        read(145, nml=nml_mcmc_settings, iostat=io)
+        read(145, nml=nml_obsfiles,      iostat=io)
+        read(145, nml=nml_param_names,   iostat=io)
         close(145)
 
         parnames(1)  = parnames_1
@@ -239,8 +244,6 @@ module mcmc_mod
         parnames(59)  = parnames_59
         parnames(60)  = parnames_60
 
-
-        
         ! give the filepath to each variable
         vars4MCMC%gpp_d%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_gpp_d))
         vars4MCMC%nee_d%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_nee_d))
@@ -254,12 +257,14 @@ module mcmc_mod
         vars4MCMC%cleaf%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_cleaf)) ! foliage
         vars4MCMC%cwood%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_cwood))
 
+        ! BNPP
+        vars4MCMC%bnpp_y%filepath = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_bnpp_y))
+        
         npft = count_pft
         allocate(vars4MCMC%spec_vars(npft))
         do ipft = 1, npft
-            vars4MCMC%spec_vars(ipft)%anpp_y%filepath = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_anpp_y))
-            vars4MCMC%spec_vars(ipft)%bnpp_y%filepath = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_bnpp_y))
-            vars4MCMC%spec_vars(ipft)%lai_h%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_lai_h))
+            vars4MCMC%spec_vars(ipft)%anpp_y%filepath = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_anpp_y(ipft)))            
+            vars4MCMC%spec_vars(ipft)%lai_h%filepath  = adjustl(trim(inDir))//"/"//adjustl(trim(obsfile_lai_h(ipft)))
         enddo
         return
     end subroutine readConfsNml
@@ -621,12 +626,28 @@ module mcmc_mod
             allocate(vars4MCMC%cwood%mdData(toCountLines, 4))
         endif
 
+        ! bnpp_y
+        INQUIRE(FILE=vars4MCMC%bnpp_y%filepath, EXIST=toExistOrNot)
+        vars4MCMC%bnpp_y%existOrNot = toExistOrNot
+        print*,"test path2: ", vars4MCMC%bnpp_y%existOrNot
+        print*,"test path2: ", vars4MCMC%bnpp_y%filepath
+        if (vars4MCMC%bnpp_y%existOrNot) then
+
+            call ReadLineNumFromFile(vars4MCMC%bnpp_y%filepath, toCountLines)
+            allocate(vars4MCMC%bnpp_y%obsData(toCountLines, 5))
+            call ReadObsDataFromFile(vars4MCMC%bnpp_y%filepath, toCountLines, &
+                vars4MCMC%bnpp_y%obsData)
+            allocate(vars4MCMC%bnpp_y%mdData(toCountLines, 4))
+        endif
+
         npft = count_pft
         do ipft = 1, npft
             ! anpp_y
             INQUIRE(FILE=vars4MCMC%spec_vars(ipft)%anpp_y%filepath, EXIST=toExistOrNot)
             vars4MCMC%spec_vars(ipft)%anpp_y%existOrNot = toExistOrNot
+            print*,"test path1: ", vars4MCMC%spec_vars(ipft)%anpp_y%existOrNot
             if (vars4MCMC%spec_vars(ipft)%anpp_y%existOrNot) then
+                print*, "vars4MCMC%spec_vars(ipft)%anpp_y%filepath",vars4MCMC%spec_vars(ipft)%anpp_y%filepath
                 call ReadLineNumFromFile(vars4MCMC%spec_vars(ipft)%anpp_y%filepath, toCountLines)
                 allocate(vars4MCMC%spec_vars(ipft)%anpp_y%obsData(toCountLines, 5))
                 call ReadObsDataFromFile(vars4MCMC%spec_vars(ipft)%anpp_y%filepath, toCountLines, &
@@ -634,20 +655,10 @@ module mcmc_mod
                 allocate(vars4MCMC%spec_vars(ipft)%anpp_y%mdData(toCountLines, 4))
             endif
 
-            ! bnpp_y
-            INQUIRE(FILE=vars4MCMC%spec_vars(ipft)%bnpp_y%filepath, EXIST=toExistOrNot)
-            vars4MCMC%spec_vars(ipft)%bnpp_y%existOrNot = toExistOrNot
-            if (vars4MCMC%spec_vars(ipft)%bnpp_y%existOrNot) then
-                call ReadLineNumFromFile(vars4MCMC%spec_vars(ipft)%bnpp_y%filepath, toCountLines)
-                allocate(vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(toCountLines, 5))
-                call ReadObsDataFromFile(vars4MCMC%spec_vars(ipft)%bnpp_y%filepath, toCountLines, &
-                    vars4MCMC%spec_vars(ipft)%bnpp_y%obsData)
-                allocate(vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(toCountLines, 4))
-            endif
-
             ! lai_h
             INQUIRE(FILE=vars4MCMC%spec_vars(ipft)%lai_h%filepath, EXIST=toExistOrNot)
             vars4MCMC%spec_vars(ipft)%lai_h%existOrNot = toExistOrNot
+            print*, "test path3: ", vars4MCMC%spec_vars(ipft)%lai_h%existOrNot
             if (vars4MCMC%spec_vars(ipft)%lai_h%existOrNot) then
                 call ReadLineNumFromFile(vars4MCMC%spec_vars(ipft)%lai_h%filepath, toCountLines)
                 allocate(vars4MCMC%spec_vars(ipft)%lai_h%obsData(toCountLines, 5))
@@ -746,8 +757,7 @@ module mcmc_mod
 
     subroutine giveValues2par(arr_par)
         implicit none
-        real(*), intent(inout) :: arr_par
-        print*, "size:",arr_par
+        real, intent(inout) :: arr_par(:)
 
         arr_par(1)  = mc_lat
         arr_par(2)  = mc_Longitude 
@@ -1008,6 +1018,29 @@ module mcmc_mod
             endif
         endif
 
+        ! bnpp_y
+        if(vars4MCMC%bnpp_y%existOrNot)then
+            if(mc_itime_bnpp_y <= size(vars4MCMC%bnpp_y%obsData, dim=1)) then
+                do while(vars4MCMC%bnpp_y%obsData(mc_itime_bnpp_y, 1) .lt. forcing(1)%year)
+                    vars4MCMC%bnpp_y%mdData(mc_itime_bnpp_y, 4) = -9999
+                    mc_itime_bnpp_y = mc_itime_bnpp_y + 1
+                enddo
+                if (vars4MCMC%bnpp_y%obsData(mc_itime_bnpp_y, 2) .lt. 0) then 
+                    vars4MCMC%bnpp_y%obsData(mc_itime_bnpp_y, 2) = 365
+                endif
+                if(vars4MCMC%bnpp_y%obsData(mc_itime_bnpp_y, 1) .eq. mc_iyear .and. &
+                vars4MCMC%bnpp_y%obsData(mc_itime_bnpp_y, 2) .eq. mc_iday  .and. &
+                vars4MCMC%bnpp_y%obsData(mc_itime_bnpp_y, 3) .eq. mc_ihour) then
+                    vars4MCMC%bnpp_y%mdData(mc_itime_bnpp_y, 1) = mc_iyear
+                    vars4MCMC%bnpp_y%mdData(mc_itime_bnpp_y, 2) = mc_iday
+                    vars4MCMC%bnpp_y%mdData(mc_itime_bnpp_y, 3) = mc_ihour
+                    vars4MCMC%bnpp_y%mdData(mc_itime_bnpp_y, 4) = &
+                        outVars_y%allSpec(ipft)%nppRoot(nYr)*3600000*365*24
+                    mc_itime_bnpp_y = mc_itime_bnpp_y + 1
+                endif
+            endif
+        endif
+
         npft = count_pft
         do ipft = 1, npft
             ! anpp_y
@@ -1037,29 +1070,6 @@ module mcmc_mod
                                 outVars_y%allSpec(ipft)%nppStem(nYr))*3600000*365*24
                         endif
                         mc_itime_anpp_y = mc_itime_anpp_y + 1
-                    endif
-                endif
-            endif
-
-            ! bnpp_y
-            if(vars4MCMC%spec_vars(ipft)%bnpp_y%existOrNot)then
-                if(mc_itime_bnpp_y <= size(vars4MCMC%spec_vars(ipft)%bnpp_y%obsData, dim=1)) then
-                    do while(vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(mc_itime_bnpp_y, 1) .lt. forcing(1)%year)
-                        vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(mc_itime_bnpp_y, 4) = -9999
-                        mc_itime_bnpp_y = mc_itime_bnpp_y + 1
-                    enddo
-                    if (vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(mc_itime_bnpp_y, 2) .lt. 0) then 
-                        vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(mc_itime_bnpp_y, 2) = 365
-                    endif
-                    if(vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(mc_itime_bnpp_y, 1) .eq. mc_iyear .and. &
-                    vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(mc_itime_bnpp_y, 2) .eq. mc_iday  .and. &
-                    vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(mc_itime_bnpp_y, 3) .eq. mc_ihour) then
-                        vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(mc_itime_bnpp_y, 1) = mc_iyear
-                        vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(mc_itime_bnpp_y, 2) = mc_iday
-                        vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(mc_itime_bnpp_y, 3) = mc_ihour
-                        vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(mc_itime_bnpp_y, 4) = &
-                            outVars_y%allSpec(ipft)%nppRoot(nYr)*3600000*365*24
-                        mc_itime_bnpp_y = mc_itime_bnpp_y + 1
                     endif
                 endif
             endif

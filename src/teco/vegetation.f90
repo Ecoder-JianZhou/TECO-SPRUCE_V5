@@ -275,7 +275,7 @@ module vegetation
          gamma_T = 0.
          gamma_N = 0.
       end if
-      print *, "L_fall: ", spec%bmleaf, 0.48*gamma_N, spec%tauC(1), st%scalW
+      ! print *, "L_fall: ", spec%bmleaf, 0.48*gamma_N, spec%tauC(1), st%scalW
       spec%L_fall = spec%bmleaf*0.48*gamma_N     ! L_fall=bmleaf*0.48*AMIN1((gamma_T+gamma_N),0.99)
       return
    end subroutine plantgrowth

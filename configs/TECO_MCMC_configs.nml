@@ -11,7 +11,6 @@
 /
 
 &nml_obsfiles
-    
     obsfile_gpp_d   = "observation_files/obsfile_gpp_d.txt"
     obsfile_nee_d   = "observation_files/obsfile_nee_d.txt"
     obsfile_reco_d  = "observation_files/obsfile_reco_d.txt"
@@ -32,7 +31,7 @@
     obsfile_lai_h   = "observation_files/obsfile_LAI_Tree_h.txt",
                       "observation_files/obsfile_LAI_Shrub_h.txt",
                       "observation_files/obsfile_LAI_Shag_h.txt"
-&end
+/
 
 &nml_param_names
    parnames_1  = "lat"

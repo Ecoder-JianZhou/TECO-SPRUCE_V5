@@ -960,7 +960,7 @@ contains
         character(len=*), intent(in) :: filepath
         character(len=100) header, line
         integer STAT, count_lines
-
+        print*, "file path: ", trim(filepath)
         open(38, file=trim(filepath), status="old", action="read", iostat=STAT) ! open file
         read(38, '(a100)') header           ! read the header of the file
         count_lines = 0                     ! initilize the count_lines

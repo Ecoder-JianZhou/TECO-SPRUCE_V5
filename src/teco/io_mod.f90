@@ -79,7 +79,7 @@ module io_mod
         ! print*, header_csv
         ! Open the file for writing
         open(newunit=unit, file=csv_fileName, status='replace', action='write', iostat=i)
-        ! write(unit, *) adjustl(trim(header_csv))
+        write(unit, *) adjustl(trim(header_csv))
         ! write the date
         nformat = 24*count_pft+98 
         ! print*,"test1..."

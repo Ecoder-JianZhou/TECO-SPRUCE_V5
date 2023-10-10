@@ -45,8 +45,12 @@ module mcmc
         character(*), intent(in) :: files_vegn_params(:)
 
         integer :: ipft, npft
+
+        ! read the nml file of MCMC configs (eg. TECO_MCMC_configs.nml)
+        call readConfsNml()
         
         npar = nSpecParams
+        ! print *, "nSpecParams", nSpecParams
         npft = size(files_vegn_params)
         ! initilize the parameters and initial values in TECO model
         allocate(vegn%allSp(npft))
@@ -59,6 +63,8 @@ module mcmc
         if(allocated(vegn%allSp)) then
             do ipft = 1, count_pft
                 allocate(mc_parvals(ipft)%parval(npar), mc_parvals(ipft)%parmin(npar), mc_parvals(ipft)%parmax(npar))
+                ! print*, "test size: ", size(mc_parvals(ipft)%parval), size(mc_parvals(ipft)%parmin), &
+                !     size(mc_parvals(ipft)%parmax), npar
                 call readParamNml(adjustl(trim("configs/"//adjustl(trim(files_vegn_params(ipft))))), &
                     mc_in_params(ipft), mc_init_params(ipft), &
                     mc_parvals(ipft)%parval, mc_parvals(ipft)%parmin, mc_parvals(ipft)%parmax)
@@ -363,11 +369,14 @@ module mcmc
                  vars4MCMC%cwood%obsData(:,5), J_cost)
             J_new = J_new + J_cost
         endif
-        ! write(*,*) "here1",J_new
-        ! anpp_y
-        ! write(*,*)vars4MCMC%anpp_y%mdData(:,4)
-        !     write(*,*)vars4MCMC%anpp_y%obsData(:,4)
-        !     write(*,*)vars4MCMC%anpp_y%obsData(:,5)
+        
+        ! bnpp_y
+        if(vars4MCMC%bnpp_y%existOrNot)then
+            call CalculateCost(vars4MCMC%bnpp_y%mdData(:,4), &
+                vars4MCMC%bnpp_y%obsData(:,4),&
+                vars4MCMC%bnpp_y%obsData(:,5), J_cost)
+            J_new = J_new + J_cost/100
+        endif
 
         npft = count_pft
         do ipft = 1, npft
@@ -379,13 +388,6 @@ module mcmc
             endif
             ! write(*,*) "here10",J_new
 
-            ! bnpp_y
-            if(vars4MCMC%spec_vars(ipft)%bnpp_y%existOrNot)then
-                call CalculateCost(vars4MCMC%spec_vars(ipft)%bnpp_y%mdData(:,4), &
-                    vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(:,4),&
-                    vars4MCMC%spec_vars(ipft)%bnpp_y%obsData(:,5), J_cost)
-                J_new = J_new + J_cost/100
-            endif
             ! write(*,*) "here9",J_new
             ! lai_h
             if(vars4MCMC%spec_vars(ipft)%lai_h%existOrNot)then
@@ -722,22 +724,22 @@ module mcmc
         if(allocated(vars4MCMC%cleaf%mdData))  deallocate(vars4MCMC%cleaf%mdData)
         if(allocated(vars4MCMC%cwood%mdData))  deallocate(vars4MCMC%cwood%mdData)
 
+        if(allocated(vars4MCMC%bnpp_y%obsData)) deallocate(vars4MCMC%bnpp_y%obsData)
+        
+        if(allocated(vars4MCMC%bnpp_y%mdData)) deallocate(vars4MCMC%bnpp_y%mdData)
+
         do ipft = 1, npft
             if(allocated(vars4MCMC%spec_vars(ipft)%anpp_y%obsData)) then
                 deallocate(vars4MCMC%spec_vars(ipft)%anpp_y%obsData)
             endif
-            if(allocated(vars4MCMC%spec_vars(ipft)%bnpp_y%obsData)) then
-                deallocate(vars4MCMC%spec_vars(ipft)%bnpp_y%obsData)
-            endif
+            
             if(allocated(vars4MCMC%spec_vars(ipft)%lai_h%obsData)) then
                 deallocate(vars4MCMC%spec_vars(ipft)%lai_h%obsData)
             endif
             if(allocated(vars4MCMC%spec_vars(ipft)%anpp_y%mdData)) then 
                 deallocate(vars4MCMC%spec_vars(ipft)%anpp_y%mdData)
             endif
-            if(allocated(vars4MCMC%spec_vars(ipft)%bnpp_y%mdData))  then
-                deallocate(vars4MCMC%spec_vars(ipft)%bnpp_y%mdData)
-            endif
+            
             if(allocated(vars4MCMC%spec_vars(ipft)%lai_h%mdData))  then
                 deallocate(vars4MCMC%spec_vars(ipft)%lai_h%mdData)
             endif

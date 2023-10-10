@@ -109,6 +109,7 @@ contains
         write(str_startyr,"(I4)")forcing(1)%year
         write(str_endyr,"(I4)")forcing(nforcing)%year
 
+        allocate(arr_params_set(npft))
         do ipft = 1, npft
             allocate(arr_params_set(ipft)%tot_paramsets(nDAsimu,npar4DA))
             allocate(arr_params_set(ipft)%sel_paramsets(nRand, npar4DA))    ! select 500 parameter sets

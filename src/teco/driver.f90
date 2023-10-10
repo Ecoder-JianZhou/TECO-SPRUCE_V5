@@ -47,7 +47,7 @@ module driver
             ! if (iyear .eq. 2016 .and. iday .eq. 1) stop
             ! if (iday .eq. 230) stop
             ! if it is a new year
-            if ((iday .eq. 1) .and. (ihour .eq. 0)) call init_yearly(vegn, year0)
+            if ((iday .eq. 1) .and. (ihour .eq. 0)) call init_yearly(vegn, iTotYearly)
             if (do_simu .and. (iday .eq. 1) .and. (ihour .eq. 0)) write(*,*)iyear
             if (do_spruce) then
                 if ((iyear .eq. 1974) .and. (iday .eq. 1) .and. (ihour .eq. 0))then
@@ -232,7 +232,7 @@ module driver
                 vegn%allSp(ipft)%bmstem  = vegn%allSp(ipft)%QC(2)/0.48
                 vegn%allSp(ipft)%bmroot  = vegn%allSp(ipft)%QC(3)/0.48
                 vegn%allSp(ipft)%bmplant = vegn%allSp(ipft)%bmleaf + vegn%allSp(ipft)%bmroot + vegn%allSp(ipft)%bmstem
-                print *, "check LAI: ",vegn%allSp(ipft)%bmleaf, vegn%allSp(ipft)%SLA
+                ! print *, "check LAI: ",vegn%allSp(ipft)%bmleaf, vegn%allSp(ipft)%SLA
                 vegn%allSp(ipft)%LAI     = vegn%allSp(ipft)%bmleaf*vegn%allSp(ipft)%SLA
                 ! summary
                 ! if (vegn%allSp(ipft)%gpp>0) print*, "gpp > 0",  vegn%allSp(ipft)%gpp
@@ -277,7 +277,7 @@ module driver
             ! write(*,*) outVars_d%cLeaf(iTotDaily), 24, iTotDaily, st%QC(1)
             ! print *, "outVar: ", outVars_d%gpp, outVars_h%gpp
             call updateMonthly(vegn, iTotMonthly, hoursOfmonth, iyear, iday, ihour)
-            call updateYearly(vegn, iyear, hoursOfYear, iyear, iday, ihour)
+            call updateYearly(vegn, iTotYearly, hoursOfYear, iyear, iday, ihour)
             ! call init_hourly(iclim)
             if (ihour .eq. 23) then
                 ! call init_daily()
@@ -290,6 +290,7 @@ module driver
             if (iclim < nforcing)then
                 if (forcing(iclim+1)%year>iyear) then            
                     year0        = iyear                      ! update the record of year (year0)
+                    iTotYearly   = iTotYearly + 1
                     do ipft = 1, vegn%npft
                         vegn%allSp(ipft)%storage      = vegn%allSp(ipft)%accumulation
                         vegn%allSp(ipft)%stor_use     = vegn%allSp(ipft)%Storage/times_storage_use

@@ -1,7 +1,7 @@
 &nml_teco_settings
     case_name   = "test_mcmc"     ! define the case name
-    do_simu     = True           ! simulation mode
-    do_mcmc     = False           ! MCMC for data assimilation mode
+    do_simu     = False           ! simulation mode
+    do_mcmc     = True           ! MCMC for data assimilation mode
     do_spinup   = False           ! spinup mode
     do_matrix   = False           ! whether run matrix or not
     do_restart  = False           ! whether read restart file or not
@@ -14,7 +14,7 @@
     ! output selections
     do_out_hr   = True
     do_out_day  = True
-    do_out_mon  = False
+    do_out_mon  = True
     do_out_yr   = True
 
     dtimes  = 24               ! 24: hourly simulation
