@@ -66,14 +66,15 @@ program TECO
         ! call initialize_with_restart()
     endif
 
+    if(do_out_hr)  call assign_outVars(nHours,  outVars_h, count_pft)
+    if(do_out_day) call assign_outVars(nDays,   outVars_d, count_pft)
+    if(do_out_mon) call assign_outVars(nMonths, outVars_m, count_pft)
+    if(do_out_yr)  call assign_outVars(nYears,  outVars_y, count_pft)
     if(do_simu)then
         print *, "# Start to run simulation mode."
         call initilize(file_site_params, files_pft_params, vegn)
         count_pft = vegn%npft
-        if(do_out_hr)  call assign_outVars(nHours,  outVars_h, count_pft)
-        if(do_out_day) call assign_outVars(nDays,   outVars_d, count_pft)
-        if(do_out_mon) call assign_outVars(nMonths, outVars_m, count_pft)
-        if(do_out_yr)  call assign_outVars(nYears,  outVars_y, count_pft)
+
         ! Start to run TECO model
         call teco_simu(vegn)            ! run simulation
         ! write the output data
