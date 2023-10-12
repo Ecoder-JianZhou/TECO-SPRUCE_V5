@@ -82,7 +82,7 @@ module mcmc
 
         ! read the observational data
         call readObsData() ! return a type array of vars4MCMC
-
+        print*, "here .. "
         ! handle the parameters for MCMC
         allocate(mc_DApar(npft)) 
         allocate(temp_parmin(npar), temp_parmax(npar))  ! allocate the temporary parmin value

@@ -97,8 +97,8 @@ program TECO
     elseif(do_mcmc) then
         print*, "# Start to run MCMC mode."
         call init_mcmc(files_pft_params, vegn)  ! initilize the MCMC 
-        ! call run_mcmc()                 ! run MCMC
-        ! call deallocate_mcmc()          ! deallocate the MCMC variables 
+        call run_mcmc(vegn)                 ! run MCMC
+        call deallocate_mcmc()          ! deallocate the MCMC variables 
     endif
     
     if(do_out_hr)  call deallocate_results(outVars_h)
