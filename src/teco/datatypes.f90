@@ -378,7 +378,7 @@ module datatypes
         real, allocatable :: snd                     ! m, Total snow depth
         real, allocatable :: lai                     ! m2 m-2, Leaf area index 
     end type mc_outvars_data_type
-    type(mc_outvars_data_type) :: outVars_h, outVars_d, outVars_m, outVars_y
+    type(mc_outvars_data_type) :: mc_outVars_h, mc_outVars_d, mc_outVars_m, mc_outVars_y
 
     ! outputs
     type spec_outvars_type
