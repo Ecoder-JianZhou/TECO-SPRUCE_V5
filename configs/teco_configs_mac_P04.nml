@@ -19,10 +19,10 @@
 
     dtimes  = 24               ! 24: hourly simulation
     ! set the input and output path and files
-    inDir             = "/Users/jianzhou/Documents/2_one_driver/OneDrive - Cornell University/1_MyWorks/3_SPRUCE_data_assimilation/inputs"
+    inDir             = "/Users/jianzhou/Library/CloudStorage/OneDrive-CornellUniversity/1_MyWorks/3_SPRUCE_data_assimilation/inputs/data_assimilation/P04"
     outDir            = "/Users/jianzhou/Documents/1_MyWorks/1_SPRUCE_cases/1_SPRUCE_DA/1_code_DA/outputs"
     ! input files
-    climfile          = "SPRUCE_forcing.txt"
+    climfile          = "SPRUCE_forcing_plot04.txt"
     watertablefile    = "watertablefile.txt"
     snowdepthfile     = "SPRUCE_Snow_Depth_2011-2014.txt"
     in_restartfile    = "restart.nc"

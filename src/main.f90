@@ -66,12 +66,14 @@ program TECO
         ! call initialize_with_restart()
     endif
 
-    if(do_out_hr)  call assign_outVars(nHours,  outVars_h, count_pft)
-    if(do_out_day) call assign_outVars(nDays,   outVars_d, count_pft)
-    if(do_out_mon) call assign_outVars(nMonths, outVars_m, count_pft)
-    if(do_out_yr)  call assign_outVars(nYears,  outVars_y, count_pft)
     if(do_simu)then
         print *, "# Start to run simulation mode."
+        ! assign the output variables
+        if(do_out_hr)  call assign_outVars(nHours,  outVars_h, count_pft)
+        if(do_out_day) call assign_outVars(nDays,   outVars_d, count_pft)
+        if(do_out_mon) call assign_outVars(nMonths, outVars_m, count_pft)
+        if(do_out_yr)  call assign_outVars(nYears,  outVars_y, count_pft)
+        ! initilize the model 
         call initilize(file_site_params, files_pft_params, vegn)
         count_pft = vegn%npft
 
@@ -88,6 +90,11 @@ program TECO
         if(do_out_day) call write_outputs_csv(outDir_csv, outVars_d, nDays,  "daily") 
         if(do_out_mon) call write_outputs_csv(outDir_csv, outVars_m, nMonths,"monthly") 
 
+        if(do_out_hr)  call deallocate_results(outVars_h)
+        if(do_out_day) call deallocate_results(outVars_d)
+        if(do_out_mon) call deallocate_results(outVars_m)
+        if(do_out_yr)  call deallocate_results(outVars_y)
+        
     elseif(do_spinup)then
         print*, "# Start to run MCMC mode."
         ! call init_spinup_variables()    ! initilize the spin-up variables
@@ -102,10 +109,7 @@ program TECO
         call deallocate_mcmc()          ! deallocate the MCMC variables 
     endif
     
-    if(do_out_hr)  call deallocate_results(outVars_h)
-    if(do_out_day) call deallocate_results(outVars_d)
-    if(do_out_mon) call deallocate_results(outVars_m)
-    if(do_out_yr)  call deallocate_results(outVars_y)
+
     call deallocate_date_type()
 end program TECO
 

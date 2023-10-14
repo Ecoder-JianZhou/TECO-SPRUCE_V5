@@ -267,6 +267,119 @@ module datatypes
 
     ! some parameters, may be in species, may be in cycle
 
+    ! just one time output
+    ! outputs
+    type mc_spec_outvars_type
+        ! carbon fluxes (Kg C m-2 s-1)
+        real, allocatable :: gpp
+        real, allocatable :: nee
+        real, allocatable :: npp
+        real, allocatable :: nppLeaf
+        real, allocatable :: nppWood
+        real, allocatable :: nppStem
+        real, allocatable :: nppRoot
+        real, allocatable :: nppOther    ! According to SPRUCE-MIP, stem means above ground woody tissues which is different from wood tissues.
+        real, allocatable :: ra
+        real, allocatable :: raLeaf
+        real, allocatable :: raStem
+        real, allocatable :: raRoot
+        real, allocatable :: raOther
+        real, allocatable :: rMaint
+        real, allocatable :: rGrowth
+        real, allocatable :: nbp
+        ! Carbon Pools  (KgC m-2)
+        real, allocatable :: cLeaf
+        real, allocatable :: cStem
+        real, allocatable :: cRoot
+        ! Nitrogen pools (kgN m-2)
+        real, allocatable :: nLeaf
+        real, allocatable :: nStem
+        real, allocatable :: nRoot
+        ! real, allocatable :: nOther(:)
+        ! water fluxes (kg m-2 s-1)
+        real, allocatable :: tran
+        ! other
+        real, allocatable :: lai                     ! m2 m-2, Leaf area index
+    end type mc_spec_outvars_type
+
+    ! total outputs
+    type mc_outvars_data_type
+        integer, allocatable :: year
+        integer, allocatable :: doy
+        integer, allocatable :: hour
+        type(spec_outvars_type), allocatable :: allSpec(:)
+        ! carbon fluxes (Kg C m-2 s-1)
+        real, allocatable :: gpp
+        real, allocatable :: nee
+        real, allocatable :: npp
+        real, allocatable :: nppLeaf
+        real, allocatable :: nppWood
+        real, allocatable :: nppStem
+        real, allocatable :: nppRoot
+        real, allocatable :: nppOther           ! According to SPRUCE-MIP, stem means above ground woody tissues which is different from wood tissues.
+        real, allocatable :: ra
+        real, allocatable :: raLeaf
+        real, allocatable :: raStem
+        real, allocatable :: raRoot
+        real, allocatable :: raOther
+        real, allocatable :: rMaint
+        real, allocatable :: rGrowth            ! maintenance respiration and growth respiration
+        real, allocatable :: rh
+        real, allocatable :: nbp                ! heterotrophic respiration. NBP(net biome productivity) = GPP - Rh - Ra - other losses  
+        real, allocatable :: wetlandCH4
+        real, allocatable :: wetlandCH4prod
+        real, allocatable :: wetlandCH4cons     ! wetland net fluxes of CH4, CH4 production, CH4 consumption
+        ! Carbon Pools  (KgC m-2)
+        real, allocatable :: cLeaf
+        real, allocatable :: cStem
+        real, allocatable :: cRoot
+        real, allocatable :: cOther              ! cOther: carbon biomass in other plant organs(reserves, fruits), Jian: maybe NSC storage in TECO?
+        real, allocatable :: cLitter
+        real, allocatable :: cLitterCwd          ! litter (excluding coarse woody debris), Jian: fine litter in TECO?, cLitterCwd: carbon in coarse woody debris
+        real, allocatable :: cSoil
+        real, allocatable :: cSoilLevels(:)
+        real, allocatable :: cSoilFast
+        real, allocatable :: cSoilSlow
+        real, allocatable :: cSoilPassive        ! cSoil: soil organic carbon (Jian: total soil carbon); cSoilLevels(depth-specific soil organic carbon, Jian: depth?); cSoilPools (different pools without depth)
+        real, allocatable :: CH4(:)              ! methane concentration
+        ! Nitrogen fluxes (kgN m-2 s-1)
+        real, allocatable :: fBNF
+        real, allocatable :: fN2O
+        real, allocatable :: fNloss
+        real, allocatable :: fNnetmin
+        real, allocatable :: fNdep               ! fBNF: biological nitrogen fixation; fN2O: loss of nitrogen through emission of N2O; fNloss:Total loss of nitrogen to the atmosphere and from leaching; net mineralizaiton and deposition of N
+        ! Nitrogen pools (kgN m-2)
+        real, allocatable :: nLeaf
+        real, allocatable :: nStem
+        real, allocatable :: nRoot
+        real, allocatable :: nOther
+        real, allocatable :: nLitter
+        real, allocatable :: nLitterCwd
+        real, allocatable :: nSoil
+        real, allocatable :: nMineral                ! nMineral: Mineral nitrogen pool
+        ! energy fluxes (W m-2)
+        real, allocatable :: hfls
+        real, allocatable :: hfss
+        real, allocatable :: SWnet
+        real, allocatable :: LWnet                   ! Sensible heat flux; Latent heat flux; Net shortwave radiation; Net longwave radiation
+        ! water fluxes (kg m-2 s-1)
+        real, allocatable :: ec
+        real, allocatable :: tran
+        real, allocatable :: es                      ! Canopy evaporation; Canopy transpiration; Soil evaporation
+        real, allocatable :: hfsbl                   ! Snow sublimation
+        real, allocatable :: mrro
+        real, allocatable :: mrros
+        real, allocatable :: mrrob                   ! Total runoff; Surface runoff; Subsurface runoff
+        ! other
+        real, allocatable :: mrso(:)           ! Kg m-2, soil moisture in each soil layer
+        real, allocatable :: tsl(:)            ! K, soil temperature in each soil layer
+        real, allocatable :: tsland                  ! K, surface temperature
+        real, allocatable :: wtd                     ! m, Water table depth
+        real, allocatable :: snd                     ! m, Total snow depth
+        real, allocatable :: lai                     ! m2 m-2, Leaf area index 
+    end type mc_outvars_data_type
+    type(mc_outvars_data_type) :: outVars_h, outVars_d, outVars_m, outVars_y
+
     ! outputs
     type spec_outvars_type
         ! carbon fluxes (Kg C m-2 s-1)
